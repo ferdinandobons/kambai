@@ -16,9 +16,15 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
  * Absolute path to Claude Code's projects directory: ~/.claude/projects.
  * The scanner/parser read ONLY inside this directory, and DELETE is the only
  * write operation ever allowed under it.
+ *
+ * Overridable via the KAMBAI_PROJECTS_DIR env var (used by tests and demos to
+ * point Kambai at an isolated dataset instead of the real ~/.claude/projects).
  * @type {string}
  */
-export const CLAUDE_PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
+export const CLAUDE_PROJECTS_DIR =
+  process.env.KAMBAI_PROJECTS_DIR && process.env.KAMBAI_PROJECTS_DIR.length > 0
+    ? path.resolve(process.env.KAMBAI_PROJECTS_DIR)
+    : path.join(os.homedir(), '.claude', 'projects');
 
 /**
  * Absolute path to the local Kanban state file: <repo>/data/store.json.

@@ -45,7 +45,7 @@ test('loadStore creates defaults on first run and persists them', () => {
   assert.equal(store.version, 1);
   assert.deepEqual(
     store.columns.map((c) => c.name),
-    ['Da fare', 'In corso', 'Fatto'],
+    ['To do', 'In progress', 'Done'],
   );
   assert.deepEqual(
     store.columns.map((c) => c.order),
@@ -66,7 +66,7 @@ test('getBoard returns a deep copy that does not mutate the stored state', () =>
   board.columns[0].name = 'MUTATED';
   board.overlay['ghost'] = { columnId: 'x', order: 0, archived: false, lastDoneActivity: null };
   const fresh = getBoard();
-  assert.equal(fresh.columns[0].name, 'Da fare');
+  assert.equal(fresh.columns[0].name, 'To do');
   assert.equal('ghost' in fresh.overlay, false);
 });
 
@@ -240,7 +240,7 @@ test('recovers from a corrupt store file: backs up to .bak and resets to default
   // Reset to defaults rather than throwing.
   assert.deepEqual(
     store.columns.map((c) => c.name),
-    ['Da fare', 'In corso', 'Fatto'],
+    ['To do', 'In progress', 'Done'],
   );
   assert.deepEqual(store.overlay, {});
   // The new defaults were persisted (valid JSON on disk).

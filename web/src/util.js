@@ -21,8 +21,8 @@ function toMillis(when) {
 }
 
 /**
- * Format a timestamp as a relative, human-friendly Italian string
- * (e.g. "2h fa", "ieri", "adesso").
+ * Format a timestamp as a relative, human-friendly English string
+ * (e.g. "2h ago", "yesterday", "just now").
  *
  * @param {string|number|Date} when - ISO string, epoch ms, or Date.
  * @param {Date|number} [now] - Reference "now" (defaults to current time);
@@ -38,7 +38,7 @@ export function timeAgo(when, now) {
 
   let diff = ref - then; // ms; positive = in the past
 
-  // Future timestamps (clock skew / live file ahead) → treat as "adesso".
+  // Future timestamps (clock skew / live file ahead) → treat as "just now".
   if (diff < 0) diff = 0;
 
   const sec = Math.floor(diff / 1000);
@@ -46,22 +46,22 @@ export function timeAgo(when, now) {
   const hour = Math.floor(min / 60);
   const day = Math.floor(hour / 24);
 
-  if (sec < 45) return 'adesso';
-  if (min < 1) return `${sec}s fa`;
-  if (min < 60) return `${min}m fa`;
-  if (hour < 24) return `${hour}h fa`;
-  if (day === 1) return 'ieri';
-  if (day < 7) return `${day}g fa`;
+  if (sec < 45) return 'just now';
+  if (min < 1) return `${sec}s ago`;
+  if (min < 60) return `${min}m ago`;
+  if (hour < 24) return `${hour}h ago`;
+  if (day === 1) return 'yesterday';
+  if (day < 7) return `${day}d ago`;
   if (day < 30) {
     const weeks = Math.floor(day / 7);
-    return weeks === 1 ? '1 sett fa' : `${weeks} sett fa`;
+    return weeks === 1 ? '1w ago' : `${weeks}w ago`;
   }
   if (day < 365) {
     const months = Math.floor(day / 30);
-    return months === 1 ? '1 mese fa' : `${months} mesi fa`;
+    return months === 1 ? '1mo ago' : `${months}mo ago`;
   }
   const years = Math.floor(day / 365);
-  return years === 1 ? '1 anno fa' : `${years} anni fa`;
+  return years === 1 ? '1y ago' : `${years}y ago`;
 }
 
 /**

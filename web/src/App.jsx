@@ -301,9 +301,9 @@ export default function App() {
       ) : null}
 
       {loading ? (
-        <div className="state-msg">Caricamento sessioni…</div>
+        <div className="state-msg">Loading sessions…</div>
       ) : columns.length === 0 ? (
-        <div className="state-msg">Nessuna colonna configurata.</div>
+        <div className="state-msg">No columns configured.</div>
       ) : (
         <Board
           sessions={visibleSessions}
@@ -328,19 +328,19 @@ export default function App() {
 
       <ConfirmModal
         open={!!deleteTarget}
-        title="Elimina definitivamente"
+        title="Delete permanently"
         danger
-        confirmLabel="Elimina dal disco"
+        confirmLabel="Delete from disk"
         onConfirm={handleDeleteConfirmed}
         onCancel={() => setDeleteTarget(null)}
       >
         <p>
-          Stai per eliminare definitivamente il file della sessione{' '}
-          <strong>{deleteTarget?.title || deleteTarget?.id}</strong> dal disco.
+          You are about to permanently delete the session file{' '}
+          <strong>{deleteTarget?.title || deleteTarget?.id}</strong> from disk.
         </p>
         <p className="muted">
-          Questa azione è irreversibile: il file <code>.jsonl</code> verrà cancellato e tutto il
-          contesto della conversazione andrà perso.
+          This action is irreversible: the <code>.jsonl</code> file will be removed and all of that
+          conversation's context will be lost.
         </p>
       </ConfirmModal>
     </div>

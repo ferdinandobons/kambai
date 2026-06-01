@@ -27,7 +27,7 @@ import { decodeProjectDir, getContextWindow } from './config.js';
  * @property {number} sizeBytes
  */
 
-const NO_TITLE = '(senza titolo)';
+const NO_TITLE = '(untitled)';
 const SNIPPET_MAX = 120;
 
 /**
@@ -66,13 +66,27 @@ function extractText(content) {
  */
 function isMetaText(text) {
   const t = text.trimStart();
-  return (
+  if (
     t.startsWith('<command-') ||
     t.startsWith('<local-command') ||
     t.startsWith('<bash-') ||
     t.startsWith('<user-prompt-submit-hook') ||
     t.startsWith('Caveat: The messages below were generated')
-  );
+  ) {
+    return true;
+  }
+  // A first user message that is a whole JSON object/array is a programmatic
+  // payload (an agent/hook-launched session), not a human prompt — skip it so
+  // the title doesn't become `{ "project_dir": … }`.
+  if (t[0] === '{' || t[0] === '[') {
+    try {
+      JSON.parse(t);
+      return true;
+    } catch {
+      // Not valid JSON (or truncated) → treat as ordinary prose.
+    }
+  }
+  return false;
 }
 
 /**
@@ -211,7 +225,14 @@ export async function parseSessionFile(filePath) {
   let contextPct = null;
   if (contextTokens !== null) {
     contextWindow = getContextWindow(model);
-    contextPct = Math.round((contextTokens / contextWindow) * 100);
+    // Some sessions ran on a larger window than the model id advertised (e.g. a
+    // 1M-context beta whose model string lacks an explicit [1m] tag). If the
+    // measured tokens exceed the model default, bump to the 1M tier so the
+    // percentage stays meaningful instead of reading e.g. 377%.
+    if (contextTokens > contextWindow) {
+      contextWindow = Math.max(contextWindow, 1_000_000);
+    }
+    contextPct = Math.min(100, Math.round((contextTokens / contextWindow) * 100));
   }
 
   // Title precedence: aiTitle -> snippet of first user prompt -> "(senza titolo)".

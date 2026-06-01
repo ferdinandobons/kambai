@@ -71,9 +71,9 @@ function defaultStore() {
     version: STORE_VERSION,
     nextColumnId: 4,
     columns: [
-      { id: 'da-fare-1', name: 'Da fare', color: COLUMN_COLORS[0], order: 0 },
-      { id: 'in-corso-2', name: 'In corso', color: COLUMN_COLORS[1], order: 1 },
-      { id: 'fatto-3', name: 'Fatto', color: COLUMN_COLORS[2], order: 2 },
+      { id: 'da-fare-1', name: 'To do', color: COLUMN_COLORS[0], order: 0 },
+      { id: 'in-corso-2', name: 'In progress', color: COLUMN_COLORS[1], order: 1 },
+      { id: 'fatto-3', name: 'Done', color: COLUMN_COLORS[2], order: 2 },
     ],
     overlay: {},
   };

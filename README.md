@@ -1,26 +1,46 @@
 # Kambai
 
-A **read-only**, localhost Kanban monitor for your [Claude Code](https://claude.com/claude-code) sessions.
+**A read-only, localhost Kanban board for your [Claude Code](https://claude.com/claude-code) sessions.**
 
-Kambai scans every session stored under `~/.claude/projects/` and lays them out on a
-Kanban board. You drag cards between columns to track which conversations are **done**
-and which are **still to carry forward**. Each card shows the session title, project and
-git branch, a colored **context-usage bar**, last activity, message count and model, and a
-"riattivata" badge when a closed session sees new activity.
+![Kambai board](assets/hero.png)
 
-It updates **live**: the backend watches the session files and pushes changes to the UI
-over Server-Sent Events.
+Every Claude Code session holds the full context of your work — the reasoning, the diffs,
+the decisions. Starting a fresh session means throwing that away. Kambai scans every
+session under `~/.claude/projects/` and lays them out on a Kanban board so you can see, at
+a glance, **which conversations are done and which are still worth resuming**.
+
+Drag a card between columns to track its state. Columns are fully customizable. The board
+updates **live** — the backend watches your session files and pushes changes over
+Server-Sent Events.
 
 > **Read-only by design.** Kambai never starts, resumes, or edits your sessions. It only
-> reads files under `~/.claude/projects/`. The single exception is the explicit
-> *Elimina definitivamente* (permanent delete) action, which removes one `.jsonl` file
-> after a confirmation modal. The Kanban state itself lives in a separate local file
-> (`data/store.json`), never inside `~/.claude/projects/`.
+> reads files under `~/.claude/projects/`. The Kanban state lives in a separate local file
+> (`data/store.json`), never inside your sessions directory. The single write under the
+> sessions directory is the explicit **Delete permanently** action, which removes one
+> `.jsonl` file after a confirmation modal.
 
-## Stack
+## Features
 
-- **Backend:** Node + Fastify (ESM), `chokidar` file watcher, SSE, JSON store.
-- **Frontend:** React + Vite + dnd-kit.
+- **Every session, every project** — auto-discovers all sessions across all projects, with
+  filters by project, model, date range, and a title search.
+- **Context-usage at a glance** — each card shows the **% of the model's context window**
+  used (green / amber / red), computed from the session's token usage.
+- **Rich cards** — title (from the session's AI-generated title, with smart fallbacks),
+  project + git branch, last activity, message count, and model.
+- **Customizable columns** — rename, add, reorder, and delete columns; the defaults are
+  *To do / In progress / Done*.
+- **"Reactivated" detection** — a card you moved to a done column that later receives new
+  activity gets flagged, so a "finished" session that came back to life never slips by.
+- **Two distinct cleanups** — *Archive* hides a card while keeping the file intact;
+  *Delete permanently* removes the `.jsonl` from disk (guarded + confirmed).
+- **Live updates** — new sessions appear and existing ones refresh in real time via SSE.
+
+## How it works
+
+A Claude Code session is a `~/.claude/projects/<project>/<uuid>.jsonl` file. Kambai parses
+each one into a card (title, model, context %, message count, last activity, git branch),
+merges it with your Kanban placement from `data/store.json`, and serves it to the board.
+A `chokidar` watcher streams additions, changes, and removals to the UI.
 
 ## Install
 
@@ -30,8 +50,7 @@ From the repository root:
 npm install
 ```
 
-This installs the root tooling and both the `server/` and `web/` workspaces
-(`npm run install:all` does the same explicitly).
+This installs the root tooling and both the `server/` and `web/` npm workspaces.
 
 ## Run
 
@@ -39,35 +58,47 @@ This installs the root tooling and both the `server/` and `web/` workspaces
 npm run dev
 ```
 
-This starts the backend on **http://localhost:4319** and the Vite dev server on
+Starts the backend on **http://localhost:4319** and the Vite dev server on
 **http://localhost:5319** (which proxies `/api` and `/events` to the backend).
+Open **http://localhost:5319**.
 
-Open **http://localhost:5319** in your browser.
-
-To override the backend port, set `KAMBAI_PORT`.
-
-## Build (production)
+### Production build
 
 ```bash
-npm run build      # builds web/dist
-npm start          # backend serves web/dist as static
+npm run build   # builds web/dist
+npm start       # backend serves web/dist as static on :4319
 ```
+
+### Environment overrides
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `KAMBAI_PORT` | `4319` | Backend HTTP port. |
+| `KAMBAI_PROJECTS_DIR` | `~/.claude/projects` | Sessions directory to read (point it at an isolated dataset for tests/demos). |
+| `KAMBAI_STORE_PATH` | `data/store.json` | Where the Kanban state is persisted. |
 
 ## Test
 
 ```bash
-npm test           # runs server (node --test) and web (vitest) suites
+npm test   # server (node --test) + web (vitest)
 ```
+
+## Stack
+
+- **Backend:** Node + Fastify (ESM), `chokidar` file watcher, SSE, JSON store.
+- **Frontend:** React + Vite + dnd-kit.
 
 ## Project layout
 
 ```
 kambai/
-  package.json            # root scripts: dev (concurrently), install:all, test
+  package.json            # root: npm workspaces + dev/build/test scripts
   server/                 # Fastify backend (parser, scanner, store, watcher, sse, routes)
   web/                    # React + Vite + dnd-kit frontend
-  data/                   # store.json (Kanban state, gitignored)
+  data/                   # store.json — Kanban state (gitignored)
+  assets/                 # README hero image
   docs/                   # design spec
 ```
 
-See `docs/superpowers/specs/2026-06-01-kambai-design.md` for the full design.
+See [`docs/superpowers/specs/2026-06-01-kambai-design.md`](docs/superpowers/specs/2026-06-01-kambai-design.md)
+for the full design.

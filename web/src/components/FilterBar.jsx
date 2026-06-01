@@ -23,11 +23,11 @@ export default function FilterBar({
   totalCount,
 }) {
   const dayOptions = [
-    { value: 0, label: 'Sempre' },
-    { value: 1, label: '24 ore' },
-    { value: 7, label: '7 giorni' },
-    { value: 30, label: '30 giorni' },
-    { value: 90, label: '90 giorni' },
+    { value: 0, label: 'Any time' },
+    { value: 1, label: '24 hours' },
+    { value: 7, label: '7 days' },
+    { value: 30, label: '30 days' },
+    { value: 90, label: '90 days' },
   ];
 
   return (
@@ -40,7 +40,7 @@ export default function FilterBar({
       <input
         type="search"
         className="filter-input filter-search"
-        placeholder="Cerca nel titolo…"
+        placeholder="Search titles…"
         value={filters.search}
         onChange={(e) => onChange({ search: e.target.value })}
       />
@@ -49,9 +49,9 @@ export default function FilterBar({
         className="filter-input"
         value={filters.project}
         onChange={(e) => onChange({ project: e.target.value })}
-        aria-label="Filtra per progetto"
+        aria-label="Filter by project"
       >
-        <option value="">Tutti i progetti</option>
+        <option value="">All projects</option>
         {projects.map((p) => (
           <option key={p} value={p}>
             {p}
@@ -63,9 +63,9 @@ export default function FilterBar({
         className="filter-input"
         value={filters.model}
         onChange={(e) => onChange({ model: e.target.value })}
-        aria-label="Filtra per modello"
+        aria-label="Filter by model"
       >
-        <option value="">Tutti i modelli</option>
+        <option value="">All models</option>
         {models.map((m) => (
           <option key={m} value={m}>
             {m.replace(/^claude-/, '')}
@@ -77,7 +77,7 @@ export default function FilterBar({
         className="filter-input"
         value={String(filters.days)}
         onChange={(e) => onChange({ days: Number(e.target.value) })}
-        aria-label="Intervallo di date"
+        aria-label="Date range"
       >
         {dayOptions.map((d) => (
           <option key={d.value} value={d.value}>
@@ -92,7 +92,7 @@ export default function FilterBar({
           checked={filters.showArchived}
           onChange={(e) => onChange({ showArchived: e.target.checked })}
         />
-        <span>Mostra archiviate</span>
+        <span>Show archived</span>
       </label>
 
       <div className="filterbar-spacer" />
@@ -101,12 +101,12 @@ export default function FilterBar({
         <span className="filter-count">
           {visibleCount}
           {typeof totalCount === 'number' && totalCount !== visibleCount ? `/${totalCount}` : ''}{' '}
-          sessioni
+          sessions
         </span>
       ) : null}
 
       <button type="button" className="btn" onClick={onOpenColumnEditor}>
-        Colonne
+        Columns
       </button>
     </div>
   );

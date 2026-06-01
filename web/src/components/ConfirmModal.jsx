@@ -12,8 +12,8 @@ const FOCUSABLE =
  * @param {boolean} props.open
  * @param {string} props.title
  * @param {React.ReactNode} [props.children] - Body / explanation.
- * @param {string} [props.confirmLabel="Conferma"]
- * @param {string} [props.cancelLabel="Annulla"]
+ * @param {string} [props.confirmLabel="Confirm"]
+ * @param {string} [props.cancelLabel="Cancel"]
  * @param {boolean} [props.danger=false] - Style the confirm button as destructive.
  * @param {() => void} props.onConfirm
  * @param {() => void} props.onCancel
@@ -23,8 +23,8 @@ export default function ConfirmModal({
   open,
   title,
   children,
-  confirmLabel = 'Conferma',
-  cancelLabel = 'Annulla',
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
   danger = false,
   onConfirm,
   onCancel,

@@ -94,21 +94,21 @@ export function CardView({
         <div className="card-top">
           <span
             className="card-grip"
-            aria-label="Trascina"
+            aria-label="Drag"
             {...gripAttributes}
             {...gripListeners}
           >
             ⠿
           </span>
           <span className="card-title" title={session.title}>
-            {session.title || '(senza titolo)'}
+            {session.title || '(untitled)'}
           </span>
           <div className="card-menu" ref={menuRef}>
             <button
               type="button"
               ref={menuButtonRef}
               className="icon-btn"
-              aria-label="Azioni"
+              aria-label="Actions"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((v) => !v)}
@@ -126,7 +126,7 @@ export function CardView({
                     onArchive?.(session.id, !session.archived);
                   }}
                 >
-                  {session.archived ? 'Ripristina' : 'Archivia'}
+                  {session.archived ? 'Restore' : 'Archive'}
                 </button>
                 <button
                   type="button"
@@ -137,7 +137,7 @@ export function CardView({
                     onDelete?.(session);
                   }}
                 >
-                  Elimina
+                  Delete
                 </button>
               </div>
             ) : null}
@@ -149,12 +149,12 @@ export function CardView({
             {session.projectName || session.projectDir}
           </span>
           {branch ? <span className="card-branch">⎇ {branch}</span> : null}
-          {reactivated ? <span className="badge badge-reactivated">riattivata</span> : null}
-          {session.archived ? <span className="badge badge-archived">archiviata</span> : null}
+          {reactivated ? <span className="badge badge-reactivated">reactivated</span> : null}
+          {session.archived ? <span className="badge badge-archived">archived</span> : null}
         </div>
 
         {/* Context-usage bar */}
-        <div className="ctx-row" title={pct == null ? 'Contesto sconosciuto' : `Contesto ${pct}%`}>
+        <div className="ctx-row" title={pct == null ? 'Context unknown' : `Context ${pct}%`}>
           <div className="ctx-bar">
             <div
               className="ctx-fill"

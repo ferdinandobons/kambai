@@ -100,10 +100,10 @@ export default function ColumnEditor({
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Gestione colonne"
+        aria-label="Manage columns"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <h2 className="modal-title">Colonne</h2>
+        <h2 className="modal-title">Columns</h2>
 
         <ul className="col-editor-list">
           {columns.map((col, i) => (
@@ -116,14 +116,14 @@ export default function ColumnEditor({
                 className="filter-input col-editor-name"
                 value={col.name}
                 onChange={(e) => onRename?.(col.id, e.target.value)}
-                aria-label={`Nome colonna ${col.name}`}
+                aria-label={`Column name ${col.name}`}
               />
               <span className="col-editor-count">{counts[col.id] || 0}</span>
               <div className="col-editor-arrows">
                 <button
                   type="button"
                   className="icon-btn"
-                  aria-label="Sposta su"
+                  aria-label="Move up"
                   disabled={i === 0}
                   onClick={() => move(col.id, -1)}
                 >
@@ -132,7 +132,7 @@ export default function ColumnEditor({
                 <button
                   type="button"
                   className="icon-btn"
-                  aria-label="Sposta giù"
+                  aria-label="Move down"
                   disabled={i === columns.length - 1}
                   onClick={() => move(col.id, +1)}
                 >
@@ -142,9 +142,9 @@ export default function ColumnEditor({
               <button
                 type="button"
                 className="icon-btn icon-btn-danger"
-                aria-label={`Elimina colonna ${col.name}`}
+                aria-label={`Delete column ${col.name}`}
                 disabled={columns.length <= 1}
-                title={columns.length <= 1 ? 'Deve restare almeno una colonna' : 'Elimina colonna'}
+                title={columns.length <= 1 ? 'At least one column must remain' : 'Delete column'}
                 onClick={() => requestDelete(col)}
               >
                 🗑
@@ -156,20 +156,20 @@ export default function ColumnEditor({
         <form className="col-editor-add" onSubmit={submitAdd}>
           <input
             className="filter-input"
-            placeholder="Nuova colonna…"
+            placeholder="New column…"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
           />
           <button type="submit" className="btn btn-primary">
-            Aggiungi
+            Add
           </button>
         </form>
 
         {pendingDelete ? (
           <div className="col-editor-delete-prompt">
             <p>
-              La colonna <strong>{pendingDelete.name}</strong> contiene{' '}
-              {counts[pendingDelete.id] || 0} card. Dove vuoi spostarle?
+              Column <strong>{pendingDelete.name}</strong> holds{' '}
+              {counts[pendingDelete.id] || 0} cards. Where should they go?
             </p>
             <div className="col-editor-delete-actions">
               <select
@@ -186,10 +186,10 @@ export default function ColumnEditor({
                   ))}
               </select>
               <button type="button" className="btn" onClick={() => setPendingDelete(null)}>
-                Annulla
+                Cancel
               </button>
               <button type="button" className="btn btn-danger" onClick={confirmDelete}>
-                Sposta ed elimina
+                Move & delete
               </button>
             </div>
           </div>
@@ -197,7 +197,7 @@ export default function ColumnEditor({
 
         <div className="modal-actions">
           <button type="button" className="btn btn-primary" onClick={onClose}>
-            Chiudi
+            Close
           </button>
         </div>
       </div>

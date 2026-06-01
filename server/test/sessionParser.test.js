@@ -132,9 +132,9 @@ test('parseSessionFile: null context fields when no usage data is present', asyn
   assert.equal(meta.model, null);
 });
 
-test('parseSessionFile: title is "(senza titolo)" with no aiTitle and no user text', async () => {
+test('parseSessionFile: title is "(untitled)" with no aiTitle and no user text', async () => {
   const meta = await parseSessionFile(fixture('minimal-no-usage.jsonl'));
-  assert.equal(meta.title, '(senza titolo)');
+  assert.equal(meta.title, '(untitled)');
 });
 
 test('parseSessionFile: missing fields fall back (lastPrompt/gitBranch/createdAt null)', async () => {
@@ -165,7 +165,7 @@ test('parseSessionFile: tolerates a file whose only line is truncated JSON', asy
     const meta = await parseSessionFile(file);
     assert.equal(meta.messageCount, 0);
     assert.equal(meta.contextTokens, null);
-    assert.equal(meta.title, '(senza titolo)');
+    assert.equal(meta.title, '(untitled)');
     assert.equal(meta.id, 'd4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80');
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -195,6 +195,29 @@ test('parseSessionFile: fallback title skips command/caveat envelopes', async ()
     assert.equal(meta.title, 'Fix the failing pagination query in the dashboard.');
     // Both user lines still counted.
     assert.equal(meta.messageCount, 2);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('parseSessionFile: fallback title skips a JSON-payload first message', async () => {
+  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kambai-'));
+  const file = path.join(tmpDir, 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d61.jsonl');
+  // First user line is a programmatic JSON payload; the real prompt follows.
+  const lines = [
+    JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content: '{ "project_dir": "/Users/x/Desktop/proj", "mode": "observe" }' },
+    }),
+    JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content: 'Add dark mode to the settings page.' },
+    }),
+  ];
+  await fs.writeFile(file, lines.join('\n') + '\n', 'utf8');
+  try {
+    const meta = await parseSessionFile(file);
+    assert.equal(meta.title, 'Add dark mode to the settings page.');
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }

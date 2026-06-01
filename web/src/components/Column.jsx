@@ -35,7 +35,7 @@ export default function Column({ column, sessions, onArchive, onDelete }) {
             <Card key={s.id} session={s} onArchive={onArchive} onDelete={onDelete} />
           ))}
         </SortableContext>
-        {sessions.length === 0 ? <div className="column-empty">Nessuna sessione</div> : null}
+        {sessions.length === 0 ? <div className="column-empty">No sessions</div> : null}
       </div>
     </section>
   );

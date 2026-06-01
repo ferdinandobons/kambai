@@ -16,46 +16,46 @@ const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 
 describe('timeAgo', () => {
-  it('returns "adesso" for very recent timestamps', () => {
-    expect(timeAgo(ago(0), NOW)).toBe('adesso');
-    expect(timeAgo(ago(10 * SEC), NOW)).toBe('adesso');
-    expect(timeAgo(ago(44 * SEC), NOW)).toBe('adesso');
+  it('returns "just now" for very recent timestamps', () => {
+    expect(timeAgo(ago(0), NOW)).toBe('just now');
+    expect(timeAgo(ago(10 * SEC), NOW)).toBe('just now');
+    expect(timeAgo(ago(44 * SEC), NOW)).toBe('just now');
   });
 
   it('formats seconds and minutes', () => {
-    expect(timeAgo(ago(50 * SEC), NOW)).toBe('50s fa');
-    expect(timeAgo(ago(2 * MIN), NOW)).toBe('2m fa');
-    expect(timeAgo(ago(59 * MIN), NOW)).toBe('59m fa');
+    expect(timeAgo(ago(50 * SEC), NOW)).toBe('50s ago');
+    expect(timeAgo(ago(2 * MIN), NOW)).toBe('2m ago');
+    expect(timeAgo(ago(59 * MIN), NOW)).toBe('59m ago');
   });
 
   it('formats hours', () => {
-    expect(timeAgo(ago(2 * HOUR), NOW)).toBe('2h fa');
-    expect(timeAgo(ago(23 * HOUR), NOW)).toBe('23h fa');
+    expect(timeAgo(ago(2 * HOUR), NOW)).toBe('2h ago');
+    expect(timeAgo(ago(23 * HOUR), NOW)).toBe('23h ago');
   });
 
-  it('formats "ieri" and days', () => {
-    expect(timeAgo(ago(1 * DAY), NOW)).toBe('ieri');
-    expect(timeAgo(ago(3 * DAY), NOW)).toBe('3g fa');
-    expect(timeAgo(ago(6 * DAY), NOW)).toBe('6g fa');
+  it('formats "yesterday" and days', () => {
+    expect(timeAgo(ago(1 * DAY), NOW)).toBe('yesterday');
+    expect(timeAgo(ago(3 * DAY), NOW)).toBe('3d ago');
+    expect(timeAgo(ago(6 * DAY), NOW)).toBe('6d ago');
   });
 
   it('formats weeks, months and years', () => {
-    expect(timeAgo(ago(7 * DAY), NOW)).toBe('1 sett fa');
-    expect(timeAgo(ago(14 * DAY), NOW)).toBe('2 sett fa');
-    expect(timeAgo(ago(30 * DAY), NOW)).toBe('1 mese fa');
-    expect(timeAgo(ago(90 * DAY), NOW)).toBe('3 mesi fa');
-    expect(timeAgo(ago(365 * DAY), NOW)).toBe('1 anno fa');
-    expect(timeAgo(ago(800 * DAY), NOW)).toBe('2 anni fa');
+    expect(timeAgo(ago(7 * DAY), NOW)).toBe('1w ago');
+    expect(timeAgo(ago(14 * DAY), NOW)).toBe('2w ago');
+    expect(timeAgo(ago(30 * DAY), NOW)).toBe('1mo ago');
+    expect(timeAgo(ago(90 * DAY), NOW)).toBe('3mo ago');
+    expect(timeAgo(ago(365 * DAY), NOW)).toBe('1y ago');
+    expect(timeAgo(ago(800 * DAY), NOW)).toBe('2y ago');
   });
 
   it('accepts ISO strings, epoch ms and Date, and an epoch-ms reference', () => {
-    expect(timeAgo(new Date(nowMs - 2 * HOUR).toISOString(), NOW)).toBe('2h fa');
-    expect(timeAgo(nowMs - 2 * HOUR, nowMs)).toBe('2h fa');
-    expect(timeAgo(ago(2 * HOUR), nowMs)).toBe('2h fa');
+    expect(timeAgo(new Date(nowMs - 2 * HOUR).toISOString(), NOW)).toBe('2h ago');
+    expect(timeAgo(nowMs - 2 * HOUR, nowMs)).toBe('2h ago');
+    expect(timeAgo(ago(2 * HOUR), nowMs)).toBe('2h ago');
   });
 
-  it('clamps future timestamps to "adesso"', () => {
-    expect(timeAgo(new Date(nowMs + 5 * MIN), NOW)).toBe('adesso');
+  it('clamps future timestamps to "just now"', () => {
+    expect(timeAgo(new Date(nowMs + 5 * MIN), NOW)).toBe('just now');
   });
 
   it('returns "—" for unparseable input', () => {
