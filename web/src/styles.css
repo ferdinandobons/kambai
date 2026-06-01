@@ -318,19 +318,44 @@ body {
   width: 280px;
 }
 
-.card-grab {
+.card-body {
   padding: 10px 11px;
-  cursor: grab;
-}
-
-.card-grab:active {
-  cursor: grabbing;
 }
 
 .card-top {
   display: flex;
   align-items: flex-start;
   gap: 6px;
+}
+
+.card-grip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  width: 18px;
+  height: 19px;
+  margin-left: -3px;
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 5px;
+  cursor: grab;
+  opacity: 0.55;
+  touch-action: none;
+  user-select: none;
+  transition: background 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+}
+
+.card-grip:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  opacity: 1;
+}
+
+.card-grip:active {
+  cursor: grabbing;
 }
 
 .card-title {

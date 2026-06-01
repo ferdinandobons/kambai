@@ -35,10 +35,15 @@ const UUID_V4 =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
- * Broadcast the current store to all SSE clients after a mutation.
+ * Broadcast a store snapshot to all SSE clients after a mutation. Mutators
+ * already return the freshly-loaded, non-shared store object, so callers can
+ * pass it directly to avoid a redundant disk read + parse; when omitted we fall
+ * back to reading the current store.
+ *
+ * @param {import('./store.js').Store} [snapshot]
  */
-function broadcastStore() {
-  broadcast({ type: 'store.changed', store: store.getBoard() });
+function broadcastStore(snapshot) {
+  broadcast({ type: 'store.changed', store: snapshot ?? store.getBoard() });
 }
 
 /**
@@ -68,14 +73,13 @@ async function resolveSessionFile(id) {
   for (const file of files) {
     if (sessionIdFromPath(file) !== id) continue;
 
-    // Resolve the candidate and ensure it stays inside the projects dir.
-    const resolved = path.resolve(file);
-    if (!isInside(base, resolved)) continue;
-
-    // Resolve symlinks too: realpath must also remain inside the projects dir.
+    // Resolve the candidate's REAL path and run a single containment check
+    // against the (also realpath'd) base. Comparing the non-realpath'd path
+    // first would spuriously fail when an ancestor of the projects dir is a
+    // symlink (e.g. a symlinked home dir), 404-ing a legitimate delete.
     let real;
     try {
-      real = await fs.realpath(resolved);
+      real = await fs.realpath(path.resolve(file));
     } catch {
       continue;
     }
@@ -100,18 +104,6 @@ function isInside(base, target) {
 }
 
 /**
- * Merge scanned sessions with the store overlay, attaching columnId/order/
- * archived to each session. Sessions without an overlay entry are returned with
- * null overlay fields (the client/ensurePlaced will sort them out).
- *
- * NOTE: this overlay-merge rule is mirrored client-side in web/src/App.jsx
- * (mergeOverlay). Keep the two in sync when changing the merged shape.
- *
- * @param {import('./sessionParser.js').SessionMeta[]} sessions
- * @param {import('./store.js').Store} board
- * @returns {Array<object>}
- */
-/**
  * Parse a SINGLE session's meta by id without re-scanning every project file.
  * Walks the (cheap) file listing, matches by id, and parses just that one file.
  *
@@ -131,13 +123,31 @@ async function findSessionMeta(id) {
   return null;
 }
 
+/**
+ * Merge scanned sessions with the store overlay, attaching columnId/order/
+ * archived to each session.
+ *
+ * On the /api/sessions path every session is run through batchEnsurePlaced
+ * before this is called, so an overlay entry always exists; the placement
+ * fields below are therefore always populated from the overlay.
+ *
+ * NOTE: the client mirrors this overlay-merge rule in web/src/App.jsx
+ * (mergeOverlay), which additionally falls back to the first column for raw
+ * SSE SessionMeta that has no overlay yet. Keep the two in sync when changing
+ * the merged shape.
+ *
+ * @param {import('./sessionParser.js').SessionMeta[]} sessions
+ * @param {import('./store.js').Store} board
+ * @returns {Array<object>}
+ */
 function mergeSessions(sessions, board) {
+  const firstCol = board.columns[0]?.id ?? null;
   return sessions.map((session) => {
     const entry = board.overlay[session.id];
     return {
       ...session,
-      columnId: entry ? entry.columnId : null,
-      order: entry ? entry.order : null,
+      columnId: entry ? entry.columnId : firstCol,
+      order: entry ? entry.order : 0,
       archived: entry ? entry.archived : false,
       lastDoneActivity: entry ? entry.lastDoneActivity : null,
     };
@@ -193,9 +203,9 @@ export async function registerRoutes(fastify) {
     const meta = await findSessionMeta(id);
     const lastActivity = meta ? meta.lastActivity : null;
 
-    store.moveCard(id, columnId, order, lastActivity);
-    broadcastStore();
-    return store.getBoard();
+    const updated = store.moveCard(id, columnId, order, lastActivity);
+    broadcastStore(updated);
+    return updated;
   });
 
   // ---- POST /api/cards/:id/archive ---------------------------------------
@@ -207,9 +217,9 @@ export async function registerRoutes(fastify) {
       return reply.code(400).send({ error: 'archived (boolean) is required' });
     }
 
-    store.setArchived(id, archived);
-    broadcastStore();
-    return store.getBoard();
+    const updated = store.setArchived(id, archived);
+    broadcastStore(updated);
+    return updated;
   });
 
   // ---- DELETE /api/sessions/:id ------------------------------------------
@@ -237,9 +247,9 @@ export async function registerRoutes(fastify) {
     }
 
     // Drop the overlay entry and notify clients (overlay change + removal).
-    store.removeOverlay(id);
+    const updated = store.removeOverlay(id);
     broadcast({ type: 'session.removed', id });
-    broadcastStore();
+    broadcastStore(updated);
     return { deleted: id };
   });
 
@@ -265,9 +275,9 @@ export async function registerRoutes(fastify) {
     if (!board.columns.some((c) => c.id === id)) {
       return reply.code(404).send({ error: 'column not found' });
     }
-    store.renameColumn(id, name.trim());
-    broadcastStore();
-    return store.getBoard();
+    const updated = store.renameColumn(id, name.trim());
+    broadcastStore(updated);
+    return updated;
   });
 
   // ---- POST /api/columns/reorder -----------------------------------------
@@ -276,9 +286,9 @@ export async function registerRoutes(fastify) {
     if (!Array.isArray(ids) || !ids.every((x) => typeof x === 'string')) {
       return reply.code(400).send({ error: 'ids (string[]) is required' });
     }
-    store.reorderColumns(ids);
-    broadcastStore();
-    return store.getBoard();
+    const updated = store.reorderColumns(ids);
+    broadcastStore(updated);
+    return updated;
   });
 
   // ---- DELETE /api/columns/:id -------------------------------------------
@@ -297,9 +307,9 @@ export async function registerRoutes(fastify) {
       return reply.code(400).send({ error: 'moveCardsTo must differ from the deleted column' });
     }
 
-    store.deleteColumn(id, moveCardsTo);
-    broadcastStore();
-    return store.getBoard();
+    const updated = store.deleteColumn(id, moveCardsTo);
+    broadcastStore(updated);
+    return updated;
   });
 
   // ---- GET /events (SSE) -------------------------------------------------

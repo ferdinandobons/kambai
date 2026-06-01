@@ -3,8 +3,9 @@
 // Two layers:
 //
 //  1. startWatcher(callbacks) — the low-level primitive declared in the
-//     scaffold contract. It watches `**/*.jsonl` under CLAUDE_PROJECTS_DIR and
-//     invokes onAdd/onChange/onUnlink with the absolute file path. Coalescing
+//     scaffold contract. It watches the depth-1 `<uuid>.jsonl` session files
+//     under CLAUDE_PROJECTS_DIR (project dirs only, no nested subagent/workflow
+//     trees) and invokes onAdd/onChange/onUnlink with the absolute path. Coalescing
 //     of rapid writes is handled by chokidar's `awaitWriteFinish` (~300ms), so
 //     a flurry of writes to a live session collapses into a single callback.
 //
@@ -17,12 +18,12 @@
 //     and forwards them to `onEvent` (typically the SSE broadcast).
 
 import path from 'node:path';
-import fs from 'node:fs';
 
 import chokidar from 'chokidar';
 
 import { CLAUDE_PROJECTS_DIR } from './config.js';
 import { parseSessionFile } from './sessionParser.js';
+import { isSessionFile } from './scanner.js';
 import * as store from './store.js';
 
 /** Per-path debounce window in milliseconds. */
@@ -41,36 +42,35 @@ const DEBOUNCE_MS = 300;
  */
 
 /**
- * chokidar `ignored` predicate. Returns true to ignore a path. We must let
- * directories through (so chokidar keeps descending) and only ignore *files*
- * that aren't .jsonl.
+ * chokidar `ignored` predicate. Returns true to IGNORE a path. We watch only the
+ * projects root, its DIRECT project subdirectories, and the `<uuid>.jsonl`
+ * session files inside them — and never descend into the per-session `<uuid>/`
+ * subtrees (subagent transcripts, workflow journals), whose files are not
+ * sessions and whose basenames collide.
  *
- * chokidar may call this with or without `stats`. When stats are absent we fall
- * back to a cheap check: a path ending in `.jsonl` is always watched; a path
- * with any other extension is treated as a file to ignore; an extension-less
- * path is assumed to be a directory and allowed.
+ * chokidar may call this with or without `stats`. A `.jsonl` path is judged by
+ * isSessionFile (depth-1 + uuid name); anything else is treated as a directory
+ * and allowed only when it is a direct child of the projects root.
  *
  * @param {string} testPath
  * @param {import('node:fs').Stats} [stats]
  * @returns {boolean}
  */
-function ignoreNonJsonl(testPath, stats) {
-  if (testPath.endsWith('.jsonl')) return false;
+function ignored(testPath, stats) {
+  const resolved = path.resolve(testPath);
+  const base = path.resolve(CLAUDE_PROJECTS_DIR);
+  if (resolved === base) return false; // always watch the projects root
 
-  if (stats) {
-    // Ignore only real files that aren't .jsonl; keep directories.
-    return stats.isFile();
+  if (testPath.endsWith('.jsonl')) {
+    // Watch only genuine depth-1 session files; ignore nested / oddly-named ones.
+    return !isSessionFile(resolved);
   }
 
-  // No stats: try to stat, else infer from the extension.
-  try {
-    const s = fs.statSync(testPath);
-    return s.isFile();
-  } catch {
-    // Path may not exist yet (e.g. about-to-be-created). Allow extension-less
-    // paths (likely directories); ignore anything with a non-.jsonl extension.
-    return path.extname(testPath) !== '';
-  }
+  // Treat anything else as a directory: allow only the direct children of the
+  // projects root (the project dirs). Ignore deeper dirs and stray files so
+  // chokidar never descends into the nested subagent/workflow trees.
+  if (stats && stats.isFile()) return true;
+  return path.dirname(resolved) !== base;
 }
 
 /**
@@ -99,14 +99,19 @@ export function sessionIdFromPath(filePath) {
 export function startWatcher(callbacks = {}) {
   const { onAdd, onChange, onUnlink } = callbacks;
 
-  // chokidar v4 dropped glob support, so we watch the projects directory
-  // recursively and filter to *.jsonl ourselves. The `ignored` predicate must
-  // still allow directories through (so chokidar descends into them); only
-  // non-.jsonl *files* are ignored.
+  // chokidar v4 dropped glob support, so we watch the projects directory and
+  // filter ourselves. The `ignored` predicate keeps us to the projects root,
+  // its direct project dirs, and depth-1 `<uuid>.jsonl` session files — it never
+  // descends into the nested subagent/workflow subtrees.
   const watcher = chokidar.watch(CLAUDE_PROJECTS_DIR, {
     persistent: true,
     ignoreInitial: true, // initial inventory is handled by scanAllSessions()
-    ignored: ignoreNonJsonl,
+    ignored,
+    // Do NOT follow symlinks: a .jsonl symlink whose target lives outside
+    // CLAUDE_PROJECTS_DIR would otherwise be read and its contents disclosed
+    // over SSE, violating the read-containment contract. This matches the
+    // scanner's walk(), which skips symlinks via Dirent.isFile()/isDirectory().
+    followSymlinks: false,
     awaitWriteFinish: {
       stabilityThreshold: DEBOUNCE_MS,
       pollInterval: 50,
@@ -152,6 +157,7 @@ export function startSessionWatcher(onEvent) {
 
   return startWatcher({
     onAdd: async (filePath) => {
+      if (!isSessionFile(filePath)) return; // defensive: never a nested journal
       try {
         const session = await parseSessionFile(filePath);
         // New session → make sure it has a board placement (first column).
@@ -166,6 +172,7 @@ export function startSessionWatcher(onEvent) {
       }
     },
     onChange: async (filePath) => {
+      if (!isSessionFile(filePath)) return;
       try {
         const session = await parseSessionFile(filePath);
         emit({ type: 'session.updated', session });
@@ -174,7 +181,14 @@ export function startSessionWatcher(onEvent) {
       }
     },
     onUnlink: (filePath) => {
-      emit({ type: 'session.removed', id: sessionIdFromPath(filePath) });
+      if (!isSessionFile(filePath)) return;
+      const id = sessionIdFromPath(filePath);
+      emit({ type: 'session.removed', id });
+      // Mirror the DELETE route: an out-of-band file removal should also drop
+      // the session's overlay entry so it doesn't leak in store.json, then
+      // broadcast the authoritative store so clients converge.
+      store.removeOverlay(id);
+      emit({ type: 'store.changed', store: store.getBoard() });
     },
   });
 }

@@ -30,74 +30,98 @@ function isReactivated(session) {
 }
 
 /**
+ * Presentational card markup. Does NOT call useSortable, so it is safe to render
+ * inside a DragOverlay without re-registering the dragged id. The interactive
+ * Card (below) wraps this with sortable wiring; the DragOverlay renders it
+ * directly. Carries the single `.card` box itself — never nest two `.card`s.
+ *
  * @param {Object} props
  * @param {object} props.session - SessionMeta merged with overlay fields.
- * @param {(id: string, archived: boolean) => void} props.onArchive
- * @param {(session: object) => void} props.onDelete
+ * @param {(id: string, archived: boolean) => void} [props.onArchive]
+ * @param {(session: object) => void} [props.onDelete]
+ * @param {string} [props.className] - extra classes for the root `.card` element.
+ * @param {object} [props.style] - inline style for the root element.
+ * @param {React.Ref} [props.nodeRef] - ref for the root element (setNodeRef).
+ * @param {object} [props.gripAttributes] - dnd-kit attributes for the grip.
+ * @param {object} [props.gripListeners] - dnd-kit listeners for the grip.
  * @returns {JSX.Element}
  */
-export default function Card({ session, onArchive, onDelete }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: session.id,
-    data: { type: 'card', columnId: session.columnId },
-  });
-
+export function CardView({
+  session,
+  onArchive,
+  onDelete,
+  className = '',
+  style,
+  nodeRef,
+  gripAttributes,
+  gripListeners,
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const menuButtonRef = useRef(null);
 
   useEffect(() => {
     if (!menuOpen) return undefined;
     const onDoc = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
     };
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+        menuButtonRef.current?.focus();
+      }
+    };
     window.addEventListener('mousedown', onDoc);
-    return () => window.removeEventListener('mousedown', onDoc);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('keydown', onKey);
+    };
   }, [menuOpen]);
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : undefined,
-  };
 
   const pct = session.contextPct;
   const reactivated = isReactivated(session);
   const branch = session.gitBranch;
 
+  const rootClass = `card${session.archived ? ' card-archived' : ''}${
+    className ? ` ${className}` : ''
+  }`;
+
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`card${session.archived ? ' card-archived' : ''}`}
-      {...attributes}
-    >
-      {/* Drag handle covers the card body; the menu button stops propagation. */}
-      <div className="card-grab" {...listeners}>
+    <div ref={nodeRef} style={style} className={rootClass}>
+      {/* The card body is NOT a drag surface; only the .card-grip handle is. */}
+      <div className="card-body">
         <div className="card-top">
+          <span
+            className="card-grip"
+            aria-label="Trascina"
+            {...gripAttributes}
+            {...gripListeners}
+          >
+            ⠿
+          </span>
           <span className="card-title" title={session.title}>
             {session.title || '(senza titolo)'}
           </span>
           <div className="card-menu" ref={menuRef}>
             <button
               type="button"
+              ref={menuButtonRef}
               className="icon-btn"
               aria-label="Azioni"
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen((v) => !v);
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((v) => !v)}
             >
               ⋯
             </button>
             {menuOpen ? (
-              <div className="menu" role="menu" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="menu" role="menu">
                 <button
                   type="button"
                   role="menuitem"
                   className="menu-item"
-                  onClick={(e) => {
-                    e.stopPropagation();
+                  onClick={() => {
                     setMenuOpen(false);
                     onArchive?.(session.id, !session.archived);
                   }}
@@ -108,8 +132,7 @@ export default function Card({ session, onArchive, onDelete }) {
                   type="button"
                   role="menuitem"
                   className="menu-item menu-item-danger"
-                  onClick={(e) => {
-                    e.stopPropagation();
+                  onClick={() => {
                     setMenuOpen(false);
                     onDelete?.(session);
                   }}
@@ -166,5 +189,37 @@ export default function Card({ session, onArchive, onDelete }) {
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * @param {Object} props
+ * @param {object} props.session - SessionMeta merged with overlay fields.
+ * @param {(id: string, archived: boolean) => void} props.onArchive
+ * @param {(session: object) => void} props.onDelete
+ * @returns {JSX.Element}
+ */
+export default function Card({ session, onArchive, onDelete }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: session.id,
+    data: { type: 'card', columnId: session.columnId },
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : undefined,
+  };
+
+  return (
+    <CardView
+      session={session}
+      onArchive={onArchive}
+      onDelete={onDelete}
+      nodeRef={setNodeRef}
+      style={style}
+      gripAttributes={attributes}
+      gripListeners={listeners}
+    />
   );
 }

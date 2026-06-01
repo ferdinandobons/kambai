@@ -2,7 +2,7 @@
 // Deleting a column that still holds cards prompts for a target column
 // (moveCardsTo) before the destructive call.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * @param {Object} props
@@ -30,6 +30,24 @@ export default function ColumnEditor({
   // Column currently pending deletion (needs a moveCardsTo choice).
   const [pendingDelete, setPendingDelete] = useState(null);
   const [moveTarget, setMoveTarget] = useState('');
+  const dialogRef = useRef(null);
+  // Keep the latest onClose without re-running the open effect (the parent
+  // passes an inline arrow, so its identity changes every render).
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') onCloseRef.current?.();
+    };
+    window.addEventListener('keydown', onKey);
+    // Move initial focus into the dialog so keyboard users land inside it.
+    // Runs only on the open transition, so it never steals focus mid-typing.
+    const firstInput = dialogRef.current?.querySelector('input, select, button');
+    firstInput?.focus();
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
 
   if (!open) return null;
 
@@ -53,7 +71,10 @@ export default function ColumnEditor({
       setMoveTarget(firstOther ? firstOther.id : '');
       setPendingDelete(col);
     } else {
-      onDelete?.(col.id, '');
+      // No cards to move, but the route + store still require a valid sibling
+      // target (the move is a harmless no-op). Mirror the non-empty branch.
+      const firstOther = columns.find((c) => c.id !== col.id);
+      onDelete?.(col.id, firstOther ? firstOther.id : '');
     }
   };
 
@@ -76,6 +97,7 @@ export default function ColumnEditor({
     <div className="modal-overlay" onMouseDown={onClose}>
       <div
         className="modal modal-wide"
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Gestione colonne"

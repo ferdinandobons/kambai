@@ -110,9 +110,20 @@ export default function App() {
             const idx = prev.findIndex((s) => s.id === merged.id);
             if (idx < 0) return [...prev, merged];
             const next = prev.slice();
-            // Preserve overlay-derived fields already known locally if the event
-            // session lacks them (the server may send raw SessionMeta).
-            next[idx] = { ...next[idx], ...merged };
+            // session.updated carries a raw SessionMeta with NO authoritative
+            // placement; the overlay we just merged against may be stale (e.g. a
+            // live file write racing ahead of an in-flight move's store.changed).
+            // So merge only the content fields and PRESERVE the placement fields
+            // already held locally (columnId/order/archived/lastDoneActivity).
+            // The trailing store.changed is the source of truth for placement.
+            const {
+              columnId: _c,
+              order: _o,
+              archived: _a,
+              lastDoneActivity: _l,
+              ...content
+            } = merged;
+            next[idx] = { ...next[idx], ...content };
             return next;
           });
           break;
@@ -138,9 +149,24 @@ export default function App() {
 
   // ---- Mutations (optimistic + server reconciles via store.changed) ----
 
-  const handleMove = useCallback(async (id, columnId, order) => {
+  const handleMove = useCallback(async (id, columnId, order, reordered) => {
+    // Optimistic update. When the caller supplies the destination column's full
+    // new ordering (`reordered`), assign sequential order values to ALL its
+    // cards so the optimistic state matches what the server will renumber to
+    // (contiguous 0..n-1). This avoids transient duplicate-order mis-ordering
+    // (two cards sharing `order` would fall back to the lastActivity tiebreak).
+    const orderById = new Map();
+    if (Array.isArray(reordered)) {
+      reordered.forEach((s, i) => orderById.set(s.id, i));
+    }
     setSessions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, columnId, order } : s)),
+      prev.map((s) => {
+        if (s.id === id) return { ...s, columnId, order: orderById.get(id) ?? order };
+        if (orderById.has(s.id) && s.columnId === columnId) {
+          return { ...s, order: orderById.get(s.id) };
+        }
+        return s;
+      }),
     );
     try {
       await api.moveCard(id, columnId, order);
@@ -281,6 +307,7 @@ export default function App() {
       ) : (
         <Board
           sessions={visibleSessions}
+          allSessions={sessions}
           columns={columns}
           onMove={handleMove}
           onArchive={handleArchive}

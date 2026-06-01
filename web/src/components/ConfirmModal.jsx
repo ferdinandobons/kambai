@@ -3,6 +3,10 @@
 
 import { useEffect, useRef } from 'react';
 
+/** Selector for tabbable elements used by the focus trap. */
+const FOCUSABLE =
+  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
 /**
  * @param {Object} props
  * @param {boolean} props.open
@@ -26,12 +30,41 @@ export default function ConfirmModal({
   onCancel,
 }) {
   const confirmRef = useRef(null);
+  const dialogRef = useRef(null);
 
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
-      if (e.key === 'Escape') onCancel?.();
-      if (e.key === 'Enter') onConfirm?.();
+      if (e.key === 'Escape') {
+        onCancel?.();
+        return;
+      }
+      // Do NOT fire a global Enter-to-confirm: a stray Enter while focus is
+      // elsewhere (e.g. a search box) must never trigger an irreversible delete.
+      // The confirm button is focused on open, so Enter on it activates the
+      // button natively. Here we only handle Enter when the confirm button is
+      // the active element (covers cases where the click handler isn't reached).
+      if (e.key === 'Enter' && document.activeElement === confirmRef.current) {
+        e.preventDefault();
+        onConfirm?.();
+        return;
+      }
+      // Focus trap: keep Tab cycling within the dialog.
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusable = Array.from(
+          dialogRef.current.querySelectorAll(FOCUSABLE),
+        ).filter((el) => !el.disabled && el.offsetParent !== null);
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener('keydown', onKey);
     // Focus the primary action when the modal opens.
@@ -45,6 +78,7 @@ export default function ConfirmModal({
     <div className="modal-overlay" onMouseDown={onCancel}>
       <div
         className="modal"
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}

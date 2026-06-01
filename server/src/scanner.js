@@ -11,41 +11,74 @@ import { parseSessionFile } from './sessionParser.js';
 /** @typedef {import('./sessionParser.js').SessionMeta} SessionMeta */
 
 /**
- * Recursively collect every *.jsonl file path under a directory. Symlinked
- * directories are not followed (withFileTypes reports the link itself), keeping
- * traversal inside CLAUDE_PROJECTS_DIR. Unreadable subdirectories are skipped.
- *
- * @param {string} dir - Absolute directory to walk.
- * @param {string[]} out - Accumulator for matching file paths.
- * @returns {Promise<void>}
+ * Loose UUID matcher (8-4-4-4-12 hex) for session filenames. A session file is
+ * always named `<uuid>.jsonl`, which lets us exclude non-session files such as
+ * workflow journals or summaries that share the .jsonl extension.
  */
-async function walk(dir, out) {
-  let entries;
-  try {
-    entries = await fs.readdir(dir, { withFileTypes: true });
-  } catch {
-    // Directory missing or unreadable (e.g. permissions) → skip silently.
-    return;
-  }
+export const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      await walk(full, out);
-    } else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
-      out.push(full);
-    }
-  }
+/**
+ * Is `filePath` a real Claude Code session file? A session is a `<uuid>.jsonl`
+ * sitting DIRECTLY inside a project directory, i.e. exactly one level under
+ * CLAUDE_PROJECTS_DIR (`<projects>/<projectDir>/<uuid>.jsonl`).
+ *
+ * This deliberately excludes everything nested deeper — subagent transcripts and
+ * workflow journals live under `<projects>/<projectDir>/<uuid>/.../*.jsonl` and
+ * often share basenames (e.g. many `journal.jsonl`), which are NOT user sessions
+ * and would collide as ids.
+ *
+ * @param {string} filePath - Absolute path.
+ * @returns {boolean}
+ */
+export function isSessionFile(filePath) {
+  if (!filePath.endsWith('.jsonl')) return false;
+  const base = path.basename(filePath, '.jsonl');
+  if (!SESSION_ID_RE.test(base)) return false;
+  // The file's directory (the project dir) must be a direct child of the
+  // projects root.
+  const projectDir = path.dirname(path.resolve(filePath));
+  return path.dirname(projectDir) === path.resolve(CLAUDE_PROJECTS_DIR);
 }
 
 /**
- * List all session .jsonl file paths under CLAUDE_PROJECTS_DIR.
+ * List all session .jsonl file paths under CLAUDE_PROJECTS_DIR. Scans exactly two
+ * levels — the project directories and the `<uuid>.jsonl` files directly inside
+ * them — so nested subagent/workflow files are never treated as sessions.
+ * Unreadable directories are skipped silently; symlinked project dirs are not
+ * followed (Dirent.isDirectory() is false for a symlink).
  *
- * @returns {Promise<string[]>} Absolute paths to every *.jsonl session file.
+ * @returns {Promise<string[]>} Absolute paths to every session file.
  */
 export async function listSessionFiles() {
   const files = [];
-  await walk(CLAUDE_PROJECTS_DIR, files);
+
+  let projectDirs;
+  try {
+    projectDirs = await fs.readdir(CLAUDE_PROJECTS_DIR, { withFileTypes: true });
+  } catch {
+    // Projects root missing or unreadable → no sessions.
+    return files;
+  }
+
+  for (const pd of projectDirs) {
+    if (!pd.isDirectory()) continue;
+    const projectPath = path.join(CLAUDE_PROJECTS_DIR, pd.name);
+
+    let entries;
+    try {
+      entries = await fs.readdir(projectPath, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
+      const id = entry.name.slice(0, -'.jsonl'.length);
+      if (!SESSION_ID_RE.test(id)) continue;
+      files.push(path.join(projectPath, entry.name));
+    }
+  }
+
   files.sort();
   return files;
 }
