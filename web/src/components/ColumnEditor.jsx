@@ -37,6 +37,13 @@ export default function ColumnEditor({
   const [pendingDelete, setPendingDelete] = useState(null);
   const [moveTarget, setMoveTarget] = useState('');
   const dialogRef = useRef(null);
+  // Per-column "just committed" guard. Enter calls commitName then input.blur(),
+  // and that blur synchronously re-fires onBlur → commitName before React flushes
+  // discardDraft's setState — so the draft is still present and the second call
+  // would issue a duplicate onRename. We record the id here on the Enter commit
+  // and have the blur-triggered commitName early-return for it (clearing the
+  // flag), so the rename fires exactly once.
+  const justCommittedRef = useRef(null);
   // Keep the latest onClose without re-running the open effect (the parent
   // passes an inline arrow, so its identity changes every render).
   const onCloseRef = useRef(onClose);
@@ -80,8 +87,21 @@ export default function ColumnEditor({
   // Commit a buffered rename: only fire onRename when the trimmed name actually
   // changed and is non-empty (the server rejects blank names). Then drop the
   // draft so the input reflects the authoritative column name again.
+  //
+  // Idempotent: with no buffered draft there is nothing to commit, so we no-op.
+  // The Enter path (commitName then input.blur(), whose onBlur calls commitName
+  // again) is guarded by justCommittedRef: discardDraft's setState has not
+  // flushed by the time the synchronous blur runs, so the draft is still
+  // present — without the ref the second call would fire a duplicate onRename.
   const commitName = (col) => {
-    const next = (col.id in draftNames ? draftNames[col.id] : col.name).trim();
+    if (justCommittedRef.current === col.id) {
+      // This is the blur fired synchronously by the Enter handler; the rename
+      // was already committed there. Clear the flag and skip the duplicate.
+      justCommittedRef.current = null;
+      return;
+    }
+    if (!(col.id in draftNames)) return;
+    const next = draftNames[col.id].trim();
     if (next && next !== col.name) onRename?.(col.id, next);
     discardDraft(col.id);
   };
@@ -156,6 +176,11 @@ export default function ColumnEditor({
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     commitName(col);
+                    // Mark this id as just-committed so the blur below (which
+                    // fires onBlur → commitName synchronously, before React has
+                    // flushed discardDraft) is treated as a no-op instead of a
+                    // duplicate onRename. The flag is cleared by that blur call.
+                    justCommittedRef.current = col.id;
                     e.target.blur();
                   } else if (e.key === 'Escape') {
                     // Discard the in-progress edit and revert to the saved name.

@@ -92,8 +92,10 @@ async function resolveSessionFile(id) {
 }
 
 /**
- * True iff `target` is the base directory itself or lives strictly inside it.
- * Uses path.relative so it is robust to ".." segments and trailing slashes.
+ * True iff `target` lives STRICTLY inside the base directory. The base directory
+ * itself is rejected (path.relative returns '' for it), so only a descendant
+ * passes. Uses path.relative so it is robust to ".." segments and trailing
+ * slashes.
  *
  * @param {string} base
  * @param {string} target
@@ -171,6 +173,20 @@ function mergeSessions(sessions, board) {
  * @returns {Promise<void>}
  */
 export async function registerRoutes(fastify) {
+  // ---- Global error handler ----------------------------------------------
+  // SECURITY: any error thrown out of a route handler (e.g. a store write that
+  // fails with EACCES, whose Error carries the OS message AND an absolute path
+  // under data/ or CLAUDE_PROJECTS_DIR) would otherwise be serialized by
+  // Fastify's default handler straight into the 500 body. Log the real error
+  // server-side and reply with a fixed, detail-free 500 so nothing about the
+  // host filesystem leaks. Routes that send their own 4xx/5xx (the reply.code
+  // validations and the DELETE route's own generic 500) return a reply and
+  // never reach here, so this only catches genuinely unhandled throws.
+  fastify.setErrorHandler((err, request, reply) => {
+    request.log.error(err, 'unhandled route error');
+    reply.code(500).send({ error: 'internal server error' });
+  });
+
   // ---- GET /api/sessions -------------------------------------------------
   // All sessions merged with overlay, plus the columns. New sessions are
   // ensurePlaced so the board is always complete.
@@ -390,5 +406,3 @@ export async function registerRoutes(fastify) {
     addClient(reply);
   });
 }
-
-export default registerRoutes;

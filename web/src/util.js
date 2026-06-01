@@ -217,6 +217,9 @@ export function sessionComparator(sortKey) {
     case 'board':
     default:
       return (a, b) => {
+        // A missing/null `order` is treated as 0, so un-placed cards sort to the
+        // top of the column (alongside order:0) and then fall to the
+        // lastActivity-desc tiebreak below.
         const ao = a.order ?? 0;
         const bo = b.order ?? 0;
         if (ao !== bo) return ao - bo;

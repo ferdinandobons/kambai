@@ -150,6 +150,11 @@ export default function App() {
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
 
+  // True once the SSE stream has dropped, so the NEXT connection.open knows it is
+  // a reconnect (not the first connect) and triggers a /api/sessions + board
+  // resync to recover any events missed while disconnected.
+  const wasDisconnectedRef = useRef(false);
+
   // The board-content wrapper, sealed inert + aria-hidden while a modal is open.
   const mainRef = useRef(null);
 
@@ -182,41 +187,55 @@ export default function App() {
     );
   }, []);
 
+  // Fetch /api/sessions + /api/board and reconcile into state. Used by the
+  // initial load AND to resync after the SSE stream reconnects (a permanent drop
+  // means we may have missed live events). `isCancelled` lets the mount effect
+  // abort a fetch whose component already unmounted. On the resync path it
+  // re-merges fresh server placement onto whatever we currently hold, re-applying
+  // any still-in-flight optimistic patch so a resync can't undo a pending op.
+  const loadAll = useCallback(async (isCancelled = () => false) => {
+    try {
+      const [data, board] = await Promise.all([api.getSessions(), api.getBoard()]);
+      if (isCancelled()) return;
+      storeRef.current = {
+        columns: board.columns || data.columns || [],
+        overlay: board.overlay || {},
+      };
+      setColumns(storeRef.current.columns);
+      // The board snapshot carries the authoritative doneColumnId.
+      setDoneColumnId(
+        resolveDoneColumnId({
+          doneColumnId: board.doneColumnId,
+          columns: storeRef.current.columns,
+        }),
+      );
+      // /api/sessions already merges overlay fields; re-merge through the same
+      // client-side mergeOverlay used by the SSE path so there is a single
+      // merge rule (columnId/order/archived/lastDoneActivity from the store
+      // overlay, falling back to the first column). Re-apply any in-flight
+      // optimistic patch so a resync mid-mutation can't visibly revert it.
+      const pending = pendingRef.current;
+      const merged = (data.sessions || []).map((s) => {
+        const m = mergeOverlay(s, storeRef.current);
+        const patch = pending.get(s.id);
+        return patch ? { ...m, ...patch } : m;
+      });
+      setSessions(merged);
+    } catch (e) {
+      if (!isCancelled()) setError(e.message || String(e));
+    } finally {
+      if (!isCancelled()) setLoading(false);
+    }
+  }, []);
+
   // Initial load.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const [data, board] = await Promise.all([api.getSessions(), api.getBoard()]);
-        if (cancelled) return;
-        storeRef.current = {
-          columns: board.columns || data.columns || [],
-          overlay: board.overlay || {},
-        };
-        setColumns(storeRef.current.columns);
-        // The board snapshot carries the authoritative doneColumnId.
-        setDoneColumnId(
-          resolveDoneColumnId({
-            doneColumnId: board.doneColumnId,
-            columns: storeRef.current.columns,
-          }),
-        );
-        // /api/sessions already merges overlay fields; re-merge through the same
-        // client-side mergeOverlay used by the SSE path so there is a single
-        // merge rule (columnId/order/archived/lastDoneActivity from the store
-        // overlay, falling back to the first column).
-        const merged = (data.sessions || []).map((s) => mergeOverlay(s, storeRef.current));
-        setSessions(merged);
-      } catch (e) {
-        if (!cancelled) setError(e.message || String(e));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+    loadAll(() => cancelled);
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadAll]);
 
   // SSE subscription for live updates.
   useEffect(() => {
@@ -283,12 +302,23 @@ export default function App() {
         }
         case 'connection.open': {
           setLiveDisconnected(false);
+          // If we are reconnecting after a prior drop, re-fetch sessions + board
+          // to resync any events missed while the stream was down (this also
+          // recovers a board left wrong by a failed move). Skip on the very first
+          // connect, which the initial load already covers.
+          if (wasDisconnectedRef.current) {
+            wasDisconnectedRef.current = false;
+            loadAll();
+          }
           break;
         }
         case 'connection.error': {
           // Only surface a banner for a permanent (CLOSED) disconnect; transient
           // errors auto-reconnect and clear via connection.open.
-          if (evt.fatal) setLiveDisconnected(true);
+          if (evt.fatal) {
+            setLiveDisconnected(true);
+            wasDisconnectedRef.current = true;
+          }
           break;
         }
         default:
@@ -296,7 +326,7 @@ export default function App() {
       }
     });
     return unsub;
-  }, [applyStore]);
+  }, [applyStore, loadAll]);
 
   const patchFilters = useCallback((patch) => {
     setFilters((f) => ({ ...f, ...patch }));
@@ -352,6 +382,17 @@ export default function App() {
       reordered.forEach((s, i) => orderById.set(s.id, i));
     }
     const movedOrder = orderById.get(id) ?? order;
+    // Snapshot the rows this optimistic update touches (the moved card and every
+    // reordered card in the destination column) BEFORE mutating, so a FAILED
+    // moveCard can restore them. A failed move emits no store.changed, so without
+    // this the board is left wrong with no self-correction (mirrors the
+    // archive/rename rollbacks).
+    const prevRows = new Map();
+    for (const s of sessionsRef.current) {
+      if (s.id === id || (orderById.has(s.id) && s.columnId === columnId)) {
+        prevRows.set(s.id, { columnId: s.columnId, order: s.order });
+      }
+    }
     setSessions((prev) =>
       prev.map((s) => {
         if (s.id === id) return { ...s, columnId, order: movedOrder };
@@ -371,6 +412,15 @@ export default function App() {
       await api.moveCard(id, columnId, order);
     } catch (e) {
       setError(e.message || String(e));
+      // Roll back the optimistic move/reorder to the captured rows. A failed move
+      // emits no store.changed, so this is the only chance to self-correct the
+      // moved card AND every reordered card in the destination column.
+      setSessions((prev) =>
+        prev.map((s) => {
+          const row = prevRows.get(s.id);
+          return row ? { ...s, columnId: row.columnId, order: row.order } : s;
+        }),
+      );
     } finally {
       // Clear ONLY the keys this move owns, preserving any field a concurrent
       // archive/rename may still be holding (aligns with the archive/rename
@@ -456,11 +506,25 @@ export default function App() {
     const target = deleteTarget;
     setDeleteTarget(null);
     if (!target) return;
+    // Capture the target's original index so a FAILED delete can re-insert it in
+    // place, rather than leaving a still-existing card missing until reload.
+    const prevIndex = sessionsRef.current.findIndex((s) => s.id === target.id);
+    const prevRow = prevIndex >= 0 ? sessionsRef.current[prevIndex] : null;
     setSessions((prev) => prev.filter((s) => s.id !== target.id));
     try {
       await api.deleteSession(target.id);
     } catch (e) {
       setError(e.message || String(e));
+      // Restore the optimistically-removed session at its original index so a
+      // failed delete does not hide a card the server still holds.
+      if (prevRow) {
+        setSessions((prev) => {
+          if (prev.some((s) => s.id === prevRow.id)) return prev;
+          const next = prev.slice();
+          next.splice(Math.min(prevIndex, next.length), 0, prevRow);
+          return next;
+        });
+      }
     }
   }, [deleteTarget]);
 
@@ -630,6 +694,9 @@ export default function App() {
         {liveDisconnected ? (
           <div className="banner banner-warn" role="status">
             <span>Live updates disconnected — the board may be out of date. Refresh to reconnect.</span>
+            <button type="button" className="btn btn-link" onClick={() => loadAll()}>
+              Reload now
+            </button>
           </div>
         ) : null}
 

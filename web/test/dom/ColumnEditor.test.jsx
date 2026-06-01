@@ -54,23 +54,18 @@ describe('ColumnEditor buffered rename', () => {
     expect(onRename).toHaveBeenCalledWith('A', 'Backlog');
   });
 
-  it('commits the rename on Enter with the new name', async () => {
+  it('commits the rename once on Enter with the new name', async () => {
     const user = userEvent.setup();
     const { onRename } = renderEditor();
     const input = nameInput('In progress');
     await user.clear(input);
     await user.type(input, 'Doing{Enter}');
     expect(onRename).toHaveBeenCalledWith('B', 'Doing');
-    // KNOWN SOURCE BUG (reported, not fixed here — do-not-edit-source rule):
-    // Enter currently fires onRename TWICE with identical args. The Enter handler
-    // calls commitName(col) then e.target.blur(); the synchronous blur re-runs
-    // commitName before React flushes discardDraft(), so a second (idempotent but
-    // wasteful) PATCH is issued. We assert the call HAPPENED with the right value
-    // and pin the current count so a future fix flips this expectation visibly.
-    expect(onRename.mock.calls).toEqual([
-      ['B', 'Doing'],
-      ['B', 'Doing'],
-    ]);
+    // Enter fires onRename exactly ONCE. The Enter handler calls commitName(col),
+    // sets a per-id "just committed" guard, then e.target.blur(); the synchronous
+    // blur re-runs commitName but the guard makes it a no-op, so no duplicate
+    // PATCH is issued (was a known source bug — now fixed).
+    expect(onRename.mock.calls).toEqual([['B', 'Doing']]);
   });
 
   it('Escape discards the in-progress edit and reverts to the saved name (no PATCH)', async () => {

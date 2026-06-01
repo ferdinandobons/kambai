@@ -74,9 +74,9 @@ function defaultStore() {
     version: STORE_VERSION,
     nextColumnId: 4,
     columns: [
-      { id: 'da-fare-1', name: 'To do', color: COLUMN_COLORS[0], order: 0 },
-      { id: 'in-corso-2', name: 'In progress', color: COLUMN_COLORS[1], order: 1 },
-      { id: 'fatto-3', name: 'Done', color: COLUMN_COLORS[2], order: 2 },
+      { id: 'to-do-1', name: 'To do', color: COLUMN_COLORS[0], order: 0 },
+      { id: 'in-progress-2', name: 'In progress', color: COLUMN_COLORS[1], order: 1 },
+      { id: 'done-3', name: 'Done', color: COLUMN_COLORS[2], order: 2 },
     ],
     overlay: {},
   };
@@ -163,6 +163,12 @@ function normalizeStore(store) {
 /**
  * Atomically write a store to disk: serialize to <path>.tmp then rename over the
  * real path. The parent directory is created if it does not exist.
+ *
+ * The writes here are intentionally SYNCHRONOUS. Beyond simplicity, the blocking
+ * read-modify-write in every mutator (loadStore → mutate → writeStore on the same
+ * tick) acts as implicit serialization: two concurrent requests cannot interleave
+ * their load and write phases, so no update is silently lost to a last-writer-wins
+ * race on store.json. Keep these synchronous unless that invariant is replaced.
  * @param {Store} store
  */
 function writeStore(store) {
@@ -400,6 +406,11 @@ export function setTitle(sessionId, title) {
       customTitle: null,
     };
     store.overlay[sessionId] = entry;
+  } else if (entry.customTitle === normalized) {
+    // The computed override already matches what is stored (e.g. a reset-to-blank
+    // on an entry whose customTitle is already null). Skip the atomic write to
+    // avoid a redundant disk round-trip; the store is unchanged either way.
+    return store;
   }
   entry.customTitle = normalized;
 

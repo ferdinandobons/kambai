@@ -63,13 +63,21 @@ export default function ConfirmModal({
       <div
         className="modal"
         ref={dialogRef}
-        role="dialog"
+        // A destructive confirm is an alertdialog so SRs treat it as an alert and
+        // announce its contents; a non-destructive one stays a plain dialog.
+        role={danger ? 'alertdialog' : 'dialog'}
         aria-modal="true"
         aria-label={title}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <h2 className="modal-title">{title}</h2>
-        {children ? <div className="modal-body">{children}</div> : null}
+        {children ? (
+          // For a destructive action, mark the body assertive so SRs announce the
+          // warning even though focus moves to the confirm button on open.
+          <div className="modal-body" aria-live={danger ? 'assertive' : undefined}>
+            {children}
+          </div>
+        ) : null}
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onCancel}>
             {cancelLabel}

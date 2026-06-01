@@ -278,3 +278,117 @@ test('DELETE /api/sessions/:id returns a generic 500 (no path leak) on a non-ENO
     await app.close();
   }
 });
+
+// ---------------------------------------------------------------------------
+// 3d. The global error handler turns an UNHANDLED route throw (a store write
+//     that fails) into a fixed, detail-free 500 — no OS message, no absolute
+//     path. store.js does `import fs from 'node:fs'`; the default export is the
+//     same cached singleton as fsSync here, so mocking renameSync intercepts the
+//     atomic write inside addColumn and forces the throw to propagate out of the
+//     route to the handler.
+// ---------------------------------------------------------------------------
+
+test('error handler: a failed store write yields a generic 500 with no path/OS detail', async () => {
+  await fs.rm(storePath, { force: true });
+  store.loadStore(); // seed defaults so addColumn's loadStore() does not re-create
+
+  // The leaky message a real EACCES rename would carry: an OS code plus the
+  // absolute tmp path under the store dir. Neither may appear in the response.
+  const leak = `EACCES: permission denied, rename '${storePath}.tmp' -> '${storePath}'`;
+  const mocked = mock.method(fsSync, 'renameSync', () => {
+    const err = new Error(leak);
+    err.code = 'EACCES';
+    err.path = `${storePath}.tmp`;
+    throw err;
+  });
+
+  const app = Fastify();
+  await app.register(registerRoutes);
+  try {
+    // POST /api/columns reaches store.addColumn → writeStore → renameSync (mocked
+    // to throw). The route does not catch it, so the global handler must.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/columns',
+      payload: { name: 'Boom' },
+    });
+    assert.equal(res.statusCode, 500);
+    assert.deepEqual(JSON.parse(res.body), { error: 'internal server error' });
+    // No filesystem/OS detail of any kind leaks into the body.
+    assert.ok(!res.body.includes(storePath), 'response must not contain the store path');
+    assert.ok(!res.body.includes(`${storePath}.tmp`), 'response must not contain the tmp path');
+    assert.ok(!/EACCES/.test(res.body), 'response must not contain the OS error code');
+    assert.ok(!res.body.includes('rename'), 'response must not contain the syscall name');
+  } finally {
+    mocked.mock.restore();
+    await app.close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 3e. POST /api/columns/reorder with an EMPTY ids array behaves sanely: it is a
+//     valid (string[]) body, so it is accepted, and reorderColumns leaves the
+//     existing order intact (every column is simply "omitted" and appended in
+//     its current order). The board must not be corrupted.
+// ---------------------------------------------------------------------------
+
+test('POST /api/columns/reorder with an empty ids array is a no-op and does not corrupt order', async () => {
+  await fs.rm(storePath, { force: true });
+  const board = store.loadStore();
+  const before = board.columns.map((c) => c.id);
+
+  const app = Fastify();
+  await app.register(registerRoutes);
+  try {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/columns/reorder',
+      payload: { ids: [] },
+    });
+    assert.equal(res.statusCode, 200);
+    // Order is preserved exactly (and orders stay contiguous 0..n-1).
+    const after = JSON.parse(res.body).columns;
+    assert.deepEqual(after.map((c) => c.id), before);
+    assert.deepEqual(after.map((c) => c.order), before.map((_, i) => i));
+    // And the same is true of the persisted store.
+    assert.deepEqual(store.loadStore().columns.map((c) => c.id), before);
+  } finally {
+    await app.close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 3f. setTitle reset-to-blank on an entry whose customTitle is ALREADY null does
+//     not perform a disk write (the value is unchanged). We count writeFileSync
+//     calls around the no-op to prove the atomic write was skipped.
+// ---------------------------------------------------------------------------
+
+test('setTitle reset no-op does not write when the title is already blank', async () => {
+  await fs.rm(storePath, { force: true });
+  store.loadStore();
+  // Create an overlay entry whose customTitle is null (ensurePlaced sets it so).
+  const id = '44444444-5555-4666-8777-888888888888';
+  store.ensurePlaced(id);
+  assert.equal(store.loadStore().overlay[id].customTitle, null);
+
+  // Now count atomic writes (writeStore → writeFileSync) across a blank reset.
+  const writeSpy = mock.method(fsSync, 'writeFileSync', () => {});
+  try {
+    const after = store.setTitle(id, '   '); // whitespace → normalized null → no change
+    assert.equal(writeSpy.mock.callCount(), 0, 'setTitle must not write when unchanged');
+    // The returned store still reflects the (unchanged) null title.
+    assert.equal(after.overlay[id].customTitle, null);
+  } finally {
+    writeSpy.mock.restore();
+  }
+
+  // A genuine change DOES write (one writeFileSync for the tmp file).
+  const writeSpy2 = mock.method(fsSync, 'writeFileSync', fsSync.writeFileSync);
+  try {
+    store.setTitle(id, 'Real title');
+    assert.ok(writeSpy2.mock.callCount() >= 1, 'a real title change must write');
+  } finally {
+    writeSpy2.mock.restore();
+  }
+  assert.equal(store.loadStore().overlay[id].customTitle, 'Real title');
+});

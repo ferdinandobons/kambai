@@ -41,6 +41,12 @@ export default function CardDetailModal({ session, onClose, onRename, onArchive,
   const sessionId = session?.id;
   const effectiveTitle = session?.title ?? '';
 
+  // Keep the latest onClose without re-running the keydown effect (the parent
+  // passes an inline arrow, so its identity changes every render). Mirrors
+  // ColumnEditor's onCloseRef pattern.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   // Reset the editable draft ONLY when a different card opens (card identity
   // changes). We intentionally do NOT re-key on effectiveTitle: a live rename of
   // the SAME card arriving via SSE while the user is mid-edit would otherwise
@@ -66,7 +72,7 @@ export default function CardDetailModal({ session, onClose, onRename, onArchive,
     if (!session) return undefined;
     const onKey = (e) => {
       if (e.key === 'Escape') {
-        onClose?.();
+        onCloseRef.current?.();
         return;
       }
       // Focus trap: keep Tab cycling within the dialog.
@@ -74,9 +80,11 @@ export default function CardDetailModal({ session, onClose, onRename, onArchive,
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-    // Keyed on whether a modal is open (not the whole session object) plus
-    // onClose, so the listener is not torn down/re-added on every content update.
-  }, [!!session, onClose]);
+    // Keyed only on whether a modal is open (not the whole session object, and
+    // not the inline onClose which changes identity every App render), so the
+    // listener is not torn down/re-added on every content update. onClose is read
+    // through onCloseRef.
+  }, [!!session]);
 
   if (!session) return null;
 

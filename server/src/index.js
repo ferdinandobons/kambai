@@ -32,8 +32,13 @@ const WEB_DIST = path.resolve(__dirname, '..', '..', 'web', 'dist');
  * @param {import('fastify').FastifyServerOptions} [opts]
  * @returns {Promise<import('fastify').FastifyInstance>}
  */
+// Cap on the accepted request body. Every Kambai mutation body is tiny (a
+// column id list, a title, a boolean), so a modest 256 KB ceiling rejects
+// absurd payloads early instead of relying on Fastify's larger default.
+const BODY_LIMIT = 256 * 1024;
+
 export async function buildApp(opts = {}) {
-  const app = Fastify({ logger: false, ...opts });
+  const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT, ...opts });
 
   // Register API + SSE routes.
   await app.register(registerRoutes);

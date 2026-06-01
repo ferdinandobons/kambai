@@ -58,6 +58,7 @@ vi.mock('../../src/components/Board.jsx', () => ({
             data-testid={`card-${s.id}`}
             data-column={s.columnId}
             data-archived={String(!!s.archived)}
+            data-order={s.order}
             data-title={s.title}
           >
             {s.title}
@@ -99,6 +100,10 @@ function isArchived(id) {
 /** Reconciled effective title for the card with `id`. */
 function titleOf(id) {
   return screen.getByTestId(`card-${id}`).getAttribute('data-title');
+}
+/** Reconciled order for the card with `id`, read from the rendered board. */
+function orderOf(id) {
+  return screen.getByTestId(`card-${id}`).getAttribute('data-order');
 }
 
 /** Invoke App.handleMove(id, columnId, order, reordered) as Board's drag-end does. */
@@ -316,6 +321,82 @@ describe('App live-update reconciliation', () => {
       emitter.emit({ type: 'connection.open' });
     });
     expect(screen.queryByText(/Live updates disconnected/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('App mutation rollback (failed REST → optimistic state restored)', () => {
+  it('(delete) a rejected api.deleteSession restores the optimistically-removed card to the board', async () => {
+    const session = makeSession({
+      id: ID,
+      title: 'Doomed card',
+      originalTitle: 'Doomed card',
+    });
+    const store = makeStore({
+      [ID]: { columnId: 'col-todo-0', order: 0, archived: false, customTitle: null },
+    });
+
+    // deleteSession REJECTS — no store.changed will ever follow, so the only
+    // self-correction is handleDeleteConfirmed's catch re-inserting the row.
+    const pending = deferred();
+    api.deleteSession.mockReturnValue(pending.promise);
+
+    const user = (await import('@testing-library/user-event')).default.setup();
+    await renderApp({ sessions: [session], store });
+    expect(screen.getByTestId(`card-${ID}`)).toBeInTheDocument();
+
+    // Open the app's hard-delete confirm flow the way the card menu does, then
+    // confirm in the real ConfirmModal App renders.
+    await act(async () => {
+      boardProps.current.onDelete(session);
+    });
+    const dialog = await screen.findByRole('alertdialog', { name: /Delete permanently/i });
+    expect(dialog).toBeInTheDocument();
+    // The card is optimistically removed the instant the confirm fires.
+    await user.click(screen.getByRole('button', { name: /Delete from disk/i }));
+    await waitFor(() => expect(screen.queryByTestId(`card-${ID}`)).not.toBeInTheDocument());
+    expect(api.deleteSession).toHaveBeenCalledWith(ID);
+
+    // The DELETE rejects → the catch re-inserts the card at its original index.
+    await act(async () => {
+      pending.reject(new Error('boom: disk delete failed'));
+    });
+    await waitFor(() => expect(screen.getByTestId(`card-${ID}`)).toBeInTheDocument());
+    // Restored card keeps its identity (title) and original column.
+    expect(titleOf(ID)).toBe('Doomed card');
+    expect(columnOf(ID)).toBe('col-todo-0');
+    // The error is surfaced to the user.
+    expect(screen.getByText(/disk delete failed/i)).toBeInTheDocument();
+  });
+
+  it('(move) a rejected api.moveCard returns the card to its original column/order', async () => {
+    const session = makeSession({ id: ID });
+    const store = makeStore({
+      [ID]: { columnId: 'col-todo-0', order: 3, archived: false, customTitle: null },
+    });
+
+    // moveCard REJECTS — a failed move emits no store.changed, so handleMove's
+    // catch is the only thing that restores placement.
+    const pending = deferred();
+    api.moveCard.mockReturnValue(pending.promise);
+
+    await renderApp({ sessions: [session], store });
+    expect(columnOf(ID)).toBe('col-todo-0');
+
+    // Optimistically move To do → In progress at index 0.
+    await act(async () => {
+      move(ID, 'col-prog-1', 0);
+    });
+    expect(columnOf(ID)).toBe('col-prog-1');
+    expect(api.moveCard).toHaveBeenCalledWith(ID, 'col-prog-1', 0);
+
+    // The POST rejects → rollback restores the captured original column AND order.
+    await act(async () => {
+      pending.reject(new Error('boom: move failed'));
+    });
+    await waitFor(() => expect(columnOf(ID)).toBe('col-todo-0'));
+    // The original order (3) is restored too, not left at the optimistic 0.
+    expect(orderOf(ID)).toBe('3');
+    expect(screen.getByText(/move failed/i)).toBeInTheDocument();
   });
 });
 

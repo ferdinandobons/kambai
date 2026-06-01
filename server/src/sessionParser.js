@@ -2,6 +2,12 @@
 // SessionMeta object. Reads ONLY inside CLAUDE_PROJECTS_DIR (callers pass paths
 // discovered by the scanner). Malformed / truncated lines (e.g. the last line
 // of a live session) are tolerated and skipped.
+//
+// SECURITY: this module does NOT itself validate filePath. It is only ever
+// called with paths the scanner enumerated from inside CLAUDE_PROJECTS_DIR, or
+// the DELETE route's resolveSessionFile output, which re-verifies containment
+// (realpath + isInside) before handing the path over. Containment is therefore
+// enforced UPSTREAM; do not call parseSessionFile with an unvalidated path.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
