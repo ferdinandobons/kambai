@@ -97,8 +97,4 @@ kambai/
   web/                    # React + Vite + dnd-kit frontend
   data/                   # store.json — Kanban state (gitignored)
   assets/                 # README hero image
-  docs/                   # design spec
 ```
-
-See [`docs/superpowers/specs/2026-06-01-kambai-design.md`](docs/superpowers/specs/2026-06-01-kambai-design.md)
-for the full design.

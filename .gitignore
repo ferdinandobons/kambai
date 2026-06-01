@@ -8,3 +8,6 @@ data/store.json.bak
 
 # Local tooling state (Bonsai observations, etc.)
 .claude/
+
+# Local design docs (kept out of the published repo)
+docs/
