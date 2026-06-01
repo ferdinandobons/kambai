@@ -27,6 +27,10 @@ Server-Sent Events.
   used (green / amber / red), computed from the session's token usage.
 - **Rich cards** — title (from the session's AI-generated title, with smart fallbacks),
   project + git branch, last activity, message count, and model.
+- **Details & rename** — click a card for a full-detail modal (project path, branch, model,
+  context, full last prompt, session id) and **rename its title** right there. The rename is
+  stored as an override in `data/store.json` — your session files are never modified, and a
+  *Reset to original* is one click away.
 - **Customizable columns** — rename, add, reorder, and delete columns; the defaults are
   *To do / In progress / Done*.
 - **"Reactivated" detection** — a card you moved to a done column that later receives new
