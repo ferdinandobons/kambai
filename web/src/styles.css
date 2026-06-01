@@ -333,6 +333,16 @@ body {
   padding: 10px 11px;
 }
 
+.card-body-clickable {
+  cursor: pointer;
+  outline: none;
+  border-radius: var(--radius-sm);
+}
+
+.card-body-clickable:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
 .card-top {
   display: flex;
   align-items: flex-start;
@@ -598,6 +608,140 @@ body {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 18px;
+}
+
+.btn-link {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  padding: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-link:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  background: transparent;
+}
+
+/* ---------- Card detail modal ---------- */
+
+.modal-detail {
+  max-width: 600px;
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-title-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.detail-title-input {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 9px 11px;
+}
+
+.detail-title-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 12.5px;
+}
+
+.detail-title-hint .muted {
+  color: var(--text-faint);
+}
+
+.detail-original {
+  color: var(--text-dim);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px 16px;
+  margin: 18px 0 0;
+  font-size: 13px;
+  overflow-y: auto;
+}
+
+.detail-grid dt {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.detail-grid dd {
+  margin: 0;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.detail-path,
+.detail-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.detail-abs {
+  font-size: 12px;
+}
+
+.detail-prompt-block {
+  margin-top: 18px;
+}
+
+.detail-prompt-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+}
+
+.detail-prompt {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.detail-actions {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.detail-actions-right {
+  display: flex;
+  gap: 10px;
+}
+
+.detail-prompt::-webkit-scrollbar,
+.detail-grid::-webkit-scrollbar {
+  width: 8px;
+}
+
+.detail-prompt::-webkit-scrollbar-thumb,
+.detail-grid::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
 }
 
 /* ---------- Column editor ---------- */

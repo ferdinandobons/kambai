@@ -8,6 +8,7 @@ import FilterBar from './components/FilterBar.jsx';
 import Board from './components/Board.jsx';
 import ColumnEditor from './components/ColumnEditor.jsx';
 import ConfirmModal from './components/ConfirmModal.jsx';
+import CardDetailModal from './components/CardDetailModal.jsx';
 
 const DEFAULT_FILTERS = {
   project: '',
@@ -19,15 +20,27 @@ const DEFAULT_FILTERS = {
 
 /**
  * Merge a store's overlay into a SessionMeta so each card carries columnId,
- * order, archived and lastDoneActivity. Used when reconciling a live session
- * against the current columns/overlay.
+ * order, archived, lastDoneActivity and the effective title. Used when
+ * reconciling a live session against the current columns/overlay.
+ *
+ * The effective-title rule (shared with the backend): the parsed title is the
+ * "original"; a non-blank overlay `customTitle` overrides it for display, search
+ * and sort. SSE delivers a raw SessionMeta (its `.title` is the original); the
+ * initial load already carries `originalTitle`. Anchoring off
+ * `originalTitle ?? title` makes both paths compute the same effective title.
  */
-function mergeOverlay(session, store) {
+export function mergeOverlay(session, store) {
   const ov = store?.overlay?.[session.id];
   const firstCol = store?.columns?.[0]?.id ?? null;
+  const base = session.originalTitle ?? session.title;
+  const customTitle = ov?.customTitle ?? null;
+  const title = customTitle && customTitle.trim() ? customTitle : base;
   if (!ov) {
     return {
       ...session,
+      title,
+      originalTitle: base,
+      customTitle: null,
       columnId: firstCol,
       order: session.order ?? 0,
       archived: false,
@@ -36,6 +49,9 @@ function mergeOverlay(session, store) {
   }
   return {
     ...session,
+    title,
+    originalTitle: base,
+    customTitle,
     columnId: ov.columnId ?? firstCol,
     order: ov.order ?? 0,
     archived: !!ov.archived,
@@ -51,6 +67,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null); // session pending hard-delete
+  const [detailId, setDetailId] = useState(null); // session id whose details modal is open
 
   // Keep the latest store (columns + overlay) so SSE session.* events can be
   // merged correctly without a stale closure.
@@ -116,14 +133,36 @@ export default function App() {
             // So merge only the content fields and PRESERVE the placement fields
             // already held locally (columnId/order/archived/lastDoneActivity).
             // The trailing store.changed is the source of truth for placement.
+            //
+            // The SAME staleness applies to the title override: during an
+            // in-flight rename the overlay still holds the pre-PATCH customTitle
+            // (null), so `merged.title`/`merged.customTitle` would clobber the
+            // optimistic rename until the PATCH's store.changed lands. So we also
+            // PRESERVE the locally-held customTitle. We DO refresh originalTitle
+            // from the freshly parsed title (it can legitimately change, e.g. an
+            // ai-title arriving later) and recompute the effective title locally:
+            // a non-blank local customTitle still wins, otherwise the new
+            // original shows through.
             const {
               columnId: _c,
               order: _o,
               archived: _a,
               lastDoneActivity: _l,
+              title: _t,
+              customTitle: _ct,
+              originalTitle,
               ...content
             } = merged;
-            next[idx] = { ...next[idx], ...content };
+            const local = next[idx];
+            const custom = local.customTitle;
+            const title = custom && custom.trim() ? custom : originalTitle;
+            next[idx] = {
+              ...local,
+              ...content,
+              originalTitle,
+              customTitle: custom,
+              title,
+            };
             return next;
           });
           break;
@@ -181,6 +220,28 @@ export default function App() {
     );
     try {
       await api.archiveCard(id, archived);
+    } catch (e) {
+      setError(e.message || String(e));
+    }
+  }, []);
+
+  const handleRenameTitle = useCallback(async (id, title) => {
+    // Optimistically apply the effective-title rule locally: a blank override
+    // resets the card to its parsed original; otherwise the override wins.
+    const trimmed = title.trim();
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (s.id !== id) return s;
+        const base = s.originalTitle ?? s.title;
+        return {
+          ...s,
+          title: trimmed || base,
+          customTitle: trimmed || null,
+        };
+      }),
+    );
+    try {
+      await api.setTitle(id, title);
     } catch (e) {
       setError(e.message || String(e));
     }
@@ -267,6 +328,13 @@ export default function App() {
     });
   }, [sessions, filters]);
 
+  // Resolve the open detail card from live state by id so the modal reflects
+  // updates (renames, archive toggles, context changes) while it is open.
+  const detailSession = useMemo(
+    () => (detailId == null ? null : sessions.find((s) => s.id === detailId) || null),
+    [detailId, sessions],
+  );
+
   const columnCounts = useMemo(() => {
     const counts = {};
     const firstCol = columns[0]?.id;
@@ -310,10 +378,26 @@ export default function App() {
           allSessions={sessions}
           columns={columns}
           onMove={handleMove}
+          onOpen={(s) => setDetailId(s.id)}
           onArchive={handleArchive}
           onDelete={(s) => setDeleteTarget(s)}
         />
       )}
+
+      {detailSession ? (
+        <CardDetailModal
+          session={detailSession}
+          onClose={() => setDetailId(null)}
+          onRename={handleRenameTitle}
+          onArchive={handleArchive}
+          onDelete={(s) => {
+            // Reuse the app's permanent-delete confirm flow, and close the
+            // detail modal so the confirm dialog is unobstructed.
+            setDetailId(null);
+            setDeleteTarget(s);
+          }}
+        />
+      ) : null}
 
       <ColumnEditor
         open={editorOpen}

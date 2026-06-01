@@ -6,6 +6,7 @@
 //   GET    /api/board             -> Store
 //   POST   /api/cards/:id/move    { columnId, order }
 //   POST   /api/cards/:id/archive { archived }
+//   PATCH  /api/cards/:id/title   { title }  (empty string resets to original)
 //   DELETE /api/sessions/:id      -> delete the .jsonl from disk (UUID-guarded,
 //                                    path-contained in CLAUDE_PROJECTS_DIR)
 //   POST   /api/columns           { name } -> column
@@ -125,7 +126,12 @@ async function findSessionMeta(id) {
 
 /**
  * Merge scanned sessions with the store overlay, attaching columnId/order/
- * archived to each session.
+ * archived to each session, plus the effective/original/custom titles.
+ *
+ * Title rule: originalTitle is the parsed SessionMeta.title; the effective
+ * title is the customTitle override when set (non-empty after trim), else the
+ * original; customTitle is the stored override or null. Display/search/sort use
+ * the effective title.
  *
  * On the /api/sessions path every session is run through batchEnsurePlaced
  * before this is called, so an overlay entry always exists; the placement
@@ -144,8 +150,12 @@ function mergeSessions(sessions, board) {
   const firstCol = board.columns[0]?.id ?? null;
   return sessions.map((session) => {
     const entry = board.overlay[session.id];
+    const customTitle = entry?.customTitle ?? null;
     return {
       ...session,
+      originalTitle: session.title,
+      title: customTitle && customTitle.trim() ? customTitle : session.title,
+      customTitle,
       columnId: entry ? entry.columnId : firstCol,
       order: entry ? entry.order : 0,
       archived: entry ? entry.archived : false,
@@ -218,6 +228,23 @@ export async function registerRoutes(fastify) {
     }
 
     const updated = store.setArchived(id, archived);
+    broadcastStore(updated);
+    return updated;
+  });
+
+  // ---- PATCH /api/cards/:id/title ----------------------------------------
+  // Set (or reset) a card's title override. An empty string resets to the
+  // parsed original. The SSE store snapshot carries the new customTitle; the
+  // client recomputes the effective title from it.
+  fastify.patch('/api/cards/:id/title', async (request, reply) => {
+    const { id } = request.params;
+    const { title } = request.body ?? {};
+
+    if (typeof title !== 'string') {
+      return reply.code(400).send({ error: 'title (string) is required' });
+    }
+
+    const updated = store.setTitle(id, title);
     broadcastStore(updated);
     return updated;
   });

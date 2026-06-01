@@ -36,6 +36,7 @@ import { STORE_PATH } from './config.js';
  * @property {number} order
  * @property {boolean} archived
  * @property {string|null} lastDoneActivity
+ * @property {string|null} customTitle - User-set title override; null = use the parsed title.
  */
 
 /**
@@ -151,6 +152,7 @@ function normalizeStore(store) {
     if (typeof entry.archived !== 'boolean') entry.archived = false;
     if (typeof entry.order !== 'number') entry.order = 0;
     if (!('lastDoneActivity' in entry)) entry.lastDoneActivity = null;
+    if (!('customTitle' in entry)) entry.customTitle = null;
   }
 
   return store;
@@ -291,7 +293,8 @@ export function moveCard(sessionId, columnId, order, lastActivity = null) {
   }
 
   const existing = store.overlay[sessionId];
-  const entry = existing ?? { columnId, order, archived: false, lastDoneActivity: null };
+  const entry =
+    existing ?? { columnId, order, archived: false, lastDoneActivity: null, customTitle: null };
   entry.columnId = columnId;
   entry.order = order;
   store.overlay[sessionId] = entry;
@@ -337,11 +340,49 @@ export function setArchived(sessionId, archived) {
       order: 0,
       archived: Boolean(archived),
       lastDoneActivity: null,
+      customTitle: null,
     };
     store.overlay[sessionId] = entry;
   } else {
     entry.archived = Boolean(archived);
   }
+
+  writeStore(store);
+  return store;
+}
+
+/**
+ * Set (or clear) a session's custom title override. Creates an overlay entry
+ * (placed in the first column, exactly like setArchived) if the session has
+ * none yet so the override can be persisted. An empty or whitespace-only title
+ * clears the override back to null so the parsed title is used again.
+ * @param {string} sessionId
+ * @param {string} title
+ * @returns {Store}
+ */
+export function setTitle(sessionId, title) {
+  const store = loadStore();
+  let entry = store.overlay[sessionId];
+  const normalized = typeof title === 'string' && title.trim() ? title.trim() : null;
+  // Reset-to-original on a session that has no overlay entry is a no-op: a fresh
+  // entry would only pin the card to the first column with customTitle=null,
+  // which is byte-for-byte identical to the merge fallback for "no entry". Skip
+  // it so a reset never materializes a redundant overlay row (or an atomic write).
+  if (!entry && normalized === null) {
+    return store;
+  }
+  if (!entry) {
+    const first = store.columns[0];
+    entry = {
+      columnId: first ? first.id : '',
+      order: 0,
+      archived: false,
+      lastDoneActivity: null,
+      customTitle: null,
+    };
+    store.overlay[sessionId] = entry;
+  }
+  entry.customTitle = normalized;
 
   writeStore(store);
   return store;
@@ -379,6 +420,7 @@ export function ensurePlaced(sessionId) {
     order: 0,
     archived: false,
     lastDoneActivity: null,
+    customTitle: null,
   };
 
   writeStore(store);
@@ -404,6 +446,7 @@ export function batchEnsurePlaced(sessionIds) {
       order: 0,
       archived: false,
       lastDoneActivity: null,
+      customTitle: null,
     };
     changed = true;
   }

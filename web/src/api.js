@@ -84,6 +84,17 @@ export async function deleteSession(id) {
 }
 
 /**
+ * PATCH /api/cards/:id/title — set a custom title override.
+ * An empty string resets the card back to its original parsed title.
+ * @param {string} id
+ * @param {string} title
+ * @returns {Promise<object>} The updated store (board).
+ */
+export async function setTitle(id, title) {
+  return send('PATCH', `/api/cards/${encodeURIComponent(id)}/title`, { title });
+}
+
+/**
  * POST /api/columns
  * @param {string} name
  * @returns {Promise<object>} The created column.

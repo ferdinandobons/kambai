@@ -52,11 +52,20 @@ function groupByColumn(sessions, columns) {
  *   server's renumber (which spans every card in the column) stays in sync.
  * @param {object[]} props.columns - ordered columns.
  * @param {(id: string, columnId: string, order: number) => void} props.onMove
+ * @param {(session: object) => void} [props.onOpen] - open the details modal.
  * @param {(id: string, archived: boolean) => void} props.onArchive
  * @param {(session: object) => void} props.onDelete
  * @returns {JSX.Element}
  */
-export default function Board({ sessions, allSessions, columns, onMove, onArchive, onDelete }) {
+export default function Board({
+  sessions,
+  allSessions,
+  columns,
+  onMove,
+  onOpen,
+  onArchive,
+  onDelete,
+}) {
   const [activeId, setActiveId] = useState(null);
 
   const sensors = useSensors(
@@ -145,6 +154,7 @@ export default function Board({ sessions, allSessions, columns, onMove, onArchiv
             key={col.id}
             column={col}
             sessions={grouped.get(col.id) || []}
+            onOpen={onOpen}
             onArchive={onArchive}
             onDelete={onDelete}
           />

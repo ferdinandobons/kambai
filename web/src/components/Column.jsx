@@ -9,11 +9,12 @@ import Card from './Card.jsx';
  * @param {Object} props
  * @param {object} props.column - { id, name, color, order }
  * @param {object[]} props.sessions - sessions assigned to this column (sorted by order).
+ * @param {(session: object) => void} [props.onOpen]
  * @param {(id: string, archived: boolean) => void} props.onArchive
  * @param {(session: object) => void} props.onDelete
  * @returns {JSX.Element}
  */
-export default function Column({ column, sessions, onArchive, onDelete }) {
+export default function Column({ column, sessions, onOpen, onArchive, onDelete }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
     data: { type: 'column', columnId: column.id },
@@ -32,7 +33,13 @@ export default function Column({ column, sessions, onArchive, onDelete }) {
       <div ref={setNodeRef} className="column-body">
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           {sessions.map((s) => (
-            <Card key={s.id} session={s} onArchive={onArchive} onDelete={onDelete} />
+            <Card
+              key={s.id}
+              session={s}
+              onOpen={onOpen}
+              onArchive={onArchive}
+              onDelete={onDelete}
+            />
           ))}
         </SortableContext>
         {sessions.length === 0 ? <div className="column-empty">No sessions</div> : null}

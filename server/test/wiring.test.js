@@ -256,3 +256,78 @@ test('routes: POST /api/columns rejects empty name with 400', async () => {
 
   await app.close();
 });
+
+// ---- PATCH /api/cards/:id/title ----------------------------------------
+// Validation guard (non-string -> 400 before any store mutation) and the
+// happy path (valid title -> store.changed broadcast carrying the new
+// customTitle). The happy path points KAMBAI_STORE_PATH at a temp file so the
+// real data/store.json is never touched, and uses a fake SSE client (the same
+// pattern as the SSE hub tests above) to capture the broadcast frame.
+
+test('routes: PATCH /api/cards/:id/title rejects a non-string title with 400', async () => {
+  const Fastify = (await import('fastify')).default;
+  const { registerRoutes } = await import('../src/routes.js');
+
+  const app = Fastify();
+  await app.register(registerRoutes);
+
+  // Missing body -> request.body ?? {} -> title undefined -> 400.
+  const missing = await app.inject({
+    method: 'PATCH',
+    url: '/api/cards/11111111-2222-4333-8444-555555555555/title',
+  });
+  assert.equal(missing.statusCode, 400);
+
+  // Non-string title -> 400 (never reaches the store).
+  const wrongType = await app.inject({
+    method: 'PATCH',
+    url: '/api/cards/11111111-2222-4333-8444-555555555555/title',
+    payload: { title: 42 },
+  });
+  assert.equal(wrongType.statusCode, 400);
+
+  await app.close();
+});
+
+test('routes: PATCH /api/cards/:id/title sets the title and broadcasts store.changed with the new customTitle', async () => {
+  const Fastify = (await import('fastify')).default;
+  const { registerRoutes } = await import('../src/routes.js');
+
+  // Isolate the store on a temp path so we never touch the real store.json.
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'kambai-wiring-'));
+  const storePath = path.join(tmpDir, 'store.json');
+  process.env.KAMBAI_STORE_PATH = storePath;
+
+  const app = Fastify();
+  await app.register(registerRoutes);
+
+  // Capture broadcasts via a fake SSE client (same shape as the SSE hub tests).
+  const { raw, chunks } = makeFakeReply();
+  addClient({ raw });
+  chunks.length = 0; // drop the connect preamble
+
+  const id = '11111111-2222-4333-8444-555555555555';
+  const res = await app.inject({
+    method: 'PATCH',
+    url: `/api/cards/${id}/title`,
+    payload: { title: 'Renamed via route' },
+  });
+
+  assert.equal(res.statusCode, 200);
+  // Response body is the updated store with the new customTitle.
+  const body = JSON.parse(res.body);
+  assert.equal(body.overlay[id].customTitle, 'Renamed via route');
+
+  // A store.changed broadcast was emitted carrying the new customTitle.
+  const out = chunks.join('');
+  assert.ok(out.includes('store.changed'), 'expected a store.changed broadcast');
+  const frame = out.split('\n\n').filter(Boolean).pop();
+  const evt = JSON.parse(frame.slice('data: '.length).trim());
+  assert.equal(evt.type, 'store.changed');
+  assert.equal(evt.store.overlay[id].customTitle, 'Renamed via route');
+
+  closeAll();
+  await app.close();
+  delete process.env.KAMBAI_STORE_PATH;
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});

@@ -17,6 +17,7 @@ import {
   getBoard,
   moveCard,
   setArchived,
+  setTitle,
   removeOverlay,
   ensurePlaced,
   addColumn,
@@ -79,6 +80,7 @@ test('moveCard places a card in a column at an order', () => {
     order: 3,
     archived: false,
     lastDoneActivity: null,
+    customTitle: null,
   });
   // Re-load from disk to prove it was persisted.
   const reloaded = loadStore();
@@ -111,6 +113,65 @@ test('setArchived toggles archived (and creates an entry if missing)', () => {
 
   const off = setArchived('s', false);
   assert.equal(off.overlay['s'].archived, false);
+});
+
+test('setTitle sets a custom title on an existing entry', () => {
+  const store = loadStore();
+  moveCard('s', store.columns[1].id, 0);
+  const after = setTitle('s', 'My renamed card');
+  assert.equal(after.overlay['s'].customTitle, 'My renamed card');
+  // The placement fields are untouched by a title change.
+  assert.equal(after.overlay['s'].columnId, store.columns[1].id);
+});
+
+test('setTitle trims the title and clears it back to null with ""', () => {
+  loadStore();
+  setTitle('s', '  spaced  ');
+  assert.equal(loadStore().overlay['s'].customTitle, 'spaced');
+
+  // Empty string resets the override to null.
+  const cleared = setTitle('s', '');
+  assert.equal(cleared.overlay['s'].customTitle, null);
+
+  // Whitespace-only also clears it.
+  setTitle('s', 'again');
+  const blanked = setTitle('s', '   ');
+  assert.equal(blanked.overlay['s'].customTitle, null);
+});
+
+test('setTitle creates an overlay entry (first column) when the session had none', () => {
+  const store = loadStore();
+  const created = setTitle('fresh', 'Brand new');
+  assert.equal(created.overlay['fresh'].customTitle, 'Brand new');
+  assert.equal(created.overlay['fresh'].columnId, store.columns[0].id);
+  assert.equal(created.overlay['fresh'].order, 0);
+  assert.equal(created.overlay['fresh'].archived, false);
+  assert.equal(created.overlay['fresh'].lastDoneActivity, null);
+});
+
+test('setTitle reset-to-original on a session with no entry is a no-op (no overlay row written)', () => {
+  loadStore();
+  // Empty / whitespace title on a session that never had an overlay entry must
+  // NOT materialize a redundant row (it would equal the "no entry" fallback).
+  const afterEmpty = setTitle('never-seen', '');
+  assert.equal('never-seen' in afterEmpty.overlay, false);
+
+  const afterBlank = setTitle('never-seen', '   ');
+  assert.equal('never-seen' in afterBlank.overlay, false);
+
+  // It is genuinely not persisted either.
+  assert.equal('never-seen' in loadStore().overlay, false);
+
+  // But a real (non-blank) title on a fresh session still creates the entry.
+  const created = setTitle('never-seen', 'Now named');
+  assert.equal(created.overlay['never-seen'].customTitle, 'Now named');
+});
+
+test('setTitle persists the custom title across a reload', () => {
+  loadStore();
+  setTitle('s', 'Persisted title');
+  const reloaded = loadStore();
+  assert.equal(reloaded.overlay['s'].customTitle, 'Persisted title');
 });
 
 test('removeOverlay drops the overlay entry', () => {

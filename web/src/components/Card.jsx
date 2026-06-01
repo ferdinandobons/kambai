@@ -37,6 +37,7 @@ function isReactivated(session) {
  *
  * @param {Object} props
  * @param {object} props.session - SessionMeta merged with overlay fields.
+ * @param {(session: object) => void} [props.onOpen] - open the details modal.
  * @param {(id: string, archived: boolean) => void} [props.onArchive]
  * @param {(session: object) => void} [props.onDelete]
  * @param {string} [props.className] - extra classes for the root `.card` element.
@@ -48,6 +49,7 @@ function isReactivated(session) {
  */
 export function CardView({
   session,
+  onOpen,
   onArchive,
   onDelete,
   className = '',
@@ -87,14 +89,40 @@ export function CardView({
     className ? ` ${className}` : ''
   }`;
 
+  // The card body opens the details modal. The grip (drag) and the actions
+  // menu live inside it but stop propagation so they never also open the modal.
+  const openable = typeof onOpen === 'function';
+  const handleOpen = openable ? () => onOpen(session) : undefined;
+  const handleOpenKey = openable
+    ? (e) => {
+        // Only open on key presses that originate on the card-body itself.
+        // dnd-kit's KeyboardSensor (on the grip) calls preventDefault but not
+        // stopPropagation, so a Space/Enter that starts a keyboard drag bubbles
+        // up here; ignoring bubbled events keeps the drag and modal separate.
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen(session);
+        }
+      }
+    : undefined;
+
   return (
     <div ref={nodeRef} style={style} className={rootClass}>
       {/* The card body is NOT a drag surface; only the .card-grip handle is. */}
-      <div className="card-body">
+      <div
+        className={`card-body${openable ? ' card-body-clickable' : ''}`}
+        role={openable ? 'button' : undefined}
+        tabIndex={openable ? 0 : undefined}
+        aria-label={openable ? `Open details for ${session.title || '(untitled)'}` : undefined}
+        onClick={handleOpen}
+        onKeyDown={handleOpenKey}
+      >
         <div className="card-top">
           <span
             className="card-grip"
             aria-label="Drag"
+            onClick={(e) => e.stopPropagation()}
             {...gripAttributes}
             {...gripListeners}
           >
@@ -103,7 +131,7 @@ export function CardView({
           <span className="card-title" title={session.title}>
             {session.title || '(untitled)'}
           </span>
-          <div className="card-menu" ref={menuRef}>
+          <div className="card-menu" ref={menuRef} onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               ref={menuButtonRef}
@@ -111,7 +139,10 @@ export function CardView({
               aria-label="Actions"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((v) => !v)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen((v) => !v);
+              }}
             >
               ⋯
             </button>
@@ -121,7 +152,8 @@ export function CardView({
                   type="button"
                   role="menuitem"
                   className="menu-item"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setMenuOpen(false);
                     onArchive?.(session.id, !session.archived);
                   }}
@@ -132,7 +164,8 @@ export function CardView({
                   type="button"
                   role="menuitem"
                   className="menu-item menu-item-danger"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setMenuOpen(false);
                     onDelete?.(session);
                   }}
@@ -195,11 +228,12 @@ export function CardView({
 /**
  * @param {Object} props
  * @param {object} props.session - SessionMeta merged with overlay fields.
+ * @param {(session: object) => void} [props.onOpen]
  * @param {(id: string, archived: boolean) => void} props.onArchive
  * @param {(session: object) => void} props.onDelete
  * @returns {JSX.Element}
  */
-export default function Card({ session, onArchive, onDelete }) {
+export default function Card({ session, onOpen, onArchive, onDelete }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: session.id,
     data: { type: 'card', columnId: session.columnId },
@@ -214,6 +248,7 @@ export default function Card({ session, onArchive, onDelete }) {
   return (
     <CardView
       session={session}
+      onOpen={onOpen}
       onArchive={onArchive}
       onDelete={onDelete}
       nodeRef={setNodeRef}
