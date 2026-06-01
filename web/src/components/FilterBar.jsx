@@ -33,7 +33,7 @@ export default function FilterBar({
   return (
     <div className="filterbar">
       <div className="brand">
-        <span className="brand-mark">▦</span>
+        <span className="brand-logo" aria-hidden="true">KAI</span>
         <span className="brand-name">Kambai</span>
       </div>
 

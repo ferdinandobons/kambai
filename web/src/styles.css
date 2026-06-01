@@ -75,9 +75,20 @@ body {
   margin-right: 6px;
 }
 
-.brand-mark {
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(91, 157, 255, 0.12);
+  border: 1px solid rgba(91, 157, 255, 0.38);
   color: var(--accent);
-  font-size: 18px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -1.2px;
+  padding-left: 1px; /* offset the trailing tracking so KAI sits optically centered */
 }
 
 .brand-name {
