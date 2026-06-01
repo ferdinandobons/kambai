@@ -22,6 +22,12 @@
   --ctx-red: #f87171;
   --ctx-gray: #4b5563;
 
+  /* Column geometry. The DragOverlay clone renders outside the column flow, so
+     it cannot inherit the in-column card width; we derive it from these instead
+     of a silently-coupled magic number (see .card-dragging). */
+  --col-width: 300px;
+  --col-body-pad-x: 10px;
+
   --radius: 10px;
   --radius-sm: 7px;
   --shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
@@ -52,6 +58,16 @@ body {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+}
+
+/* Wraps the board content behind the modals so it can be sealed inert while a
+   modal is open. Mirrors the flex-column layout the board previously inherited
+   directly from .app (flex:1 + min-height:0 so the board grows and scrolls). */
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* ---------- Filter bar ---------- */
@@ -297,7 +313,7 @@ body {
 }
 
 .column {
-  flex: 0 0 300px;
+  flex: 0 0 var(--col-width);
   display: flex;
   flex-direction: column;
   max-height: 100%;
@@ -347,7 +363,7 @@ body {
 .column-body {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 10px 12px;
+  padding: 6px var(--col-body-pad-x) 12px;
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -385,10 +401,10 @@ body {
   border-color: var(--accent);
   cursor: grabbing;
   /* The DragOverlay clone renders outside the column flow, so it cannot inherit
-     the in-column card width and must hardcode it. 280px = the 300px column
-     (.column flex-basis) minus the .column-body horizontal padding (2 × 10px).
-     Keep this in sync if either of those changes. */
-  width: 280px;
+     the in-column card width. Derive it from the column width minus the
+     .column-body horizontal padding (both sides) so it stays coupled to those
+     variables instead of a silent magic number. */
+  width: calc(var(--col-width) - 2 * var(--col-body-pad-x));
 }
 
 .card-body {
@@ -397,12 +413,27 @@ body {
 
 .card-body-clickable {
   cursor: pointer;
-  outline: none;
   border-radius: var(--radius-sm);
 }
 
-.card-body-clickable:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--accent);
+/* Dedicated "Open details" affordance: visually unobtrusive (faint, revealed on
+   card hover) but a real, keyboard-focusable button — it is the accessible path
+   to the details modal since the body click is mouse-only (a plain div, not a
+   role=button, because it nests the ⋯ menu button). */
+.card-open-btn {
+  opacity: 0;
+  font-size: 13px;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.card:hover .card-open-btn,
+.card-open-btn:focus-visible {
+  opacity: 1;
+}
+
+.card-open-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .card-top {

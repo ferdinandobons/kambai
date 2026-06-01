@@ -79,34 +79,23 @@ export function CardView({
     className ? ` ${className}` : ''
   }`;
 
-  // The card body opens the details modal. The grip (drag) and the actions
-  // menu live inside it but stop propagation so they never also open the modal.
+  // The card body opens the details modal on click. It is intentionally NOT a
+  // role="button": it nests interactive controls (the ⋯ menu button and its
+  // role="menu"), and an interactive element must not live inside a role=button.
+  // So the body stays a plain clickable div (mouse affordance only) and keyboard
+  // users get a dedicated, focusable "Open details" button rendered below — the
+  // grip (drag) and the ⋯ menu still stop propagation so they never open the modal.
   const openable = typeof onOpen === 'function';
   const handleOpen = openable ? () => onOpen(session) : undefined;
-  const handleOpenKey = openable
-    ? (e) => {
-        // Only open on key presses that originate on the card-body itself.
-        // dnd-kit's KeyboardSensor (on the grip) calls preventDefault but not
-        // stopPropagation, so a Space/Enter that starts a keyboard drag bubbles
-        // up here; ignoring bubbled events keeps the drag and modal separate.
-        if (e.target !== e.currentTarget) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onOpen(session);
-        }
-      }
-    : undefined;
 
   return (
     <div ref={nodeRef} style={style} className={rootClass}>
-      {/* The card body is NOT a drag surface; only the .card-grip handle is. */}
+      {/* The card body is NOT a drag surface; only the .card-grip handle is. It
+          is also NOT keyboard-focusable (no role/tabIndex) — see the dedicated
+          "Open details" button below for the accessible open affordance. */}
       <div
         className={`card-body${openable ? ' card-body-clickable' : ''}`}
-        role={openable ? 'button' : undefined}
-        tabIndex={openable ? 0 : undefined}
-        aria-label={openable ? `Open details for ${session.title || '(untitled)'}` : undefined}
         onClick={handleOpen}
-        onKeyDown={handleOpenKey}
       >
         <div className="card-top">
           <span
@@ -121,6 +110,23 @@ export function CardView({
           <span className="card-title" title={session.title}>
             {session.title || '(untitled)'}
           </span>
+          {openable ? (
+            // Accessible open affordance for keyboard/SR users: the body click is
+            // mouse-only (a plain div), so this real, focusable button is the
+            // keyboard path to the details modal. Same action as a body click;
+            // stopPropagation avoids a redundant second open from the body.
+            <button
+              type="button"
+              className="icon-btn card-open-btn"
+              aria-label={`Open details for ${session.title || '(untitled)'}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpen(session);
+              }}
+            >
+              ⤢
+            </button>
+          ) : null}
           <div className="card-menu" ref={menuRef} onClick={(e) => e.stopPropagation()}>
             <button
               type="button"

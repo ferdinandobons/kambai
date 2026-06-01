@@ -45,6 +45,8 @@ import { STORE_PATH } from './config.js';
  * @property {Column[]} columns
  * @property {Object.<string, OverlayEntry>} overlay
  * @property {number} nextColumnId
+ * @property {string|null} [doneColumnId] - Derived (highest-order column id);
+ *   attached by getBoard() for clients, not persisted on disk.
  */
 
 const STORE_VERSION = 1;
@@ -233,11 +235,16 @@ function clone(value) {
 }
 
 /**
- * Return a safe (deep) copy of the current store for serving to clients.
+ * Return a safe (deep) copy of the current store for serving to clients. The
+ * derived `doneColumnId` is attached so clients have one authoritative "done"
+ * column id instead of re-deriving it (the move route and the client otherwise
+ * each kept a divergent copy of the highest-order scan).
  * @returns {Store}
  */
 export function getBoard() {
-  return clone(loadStore());
+  const board = clone(loadStore());
+  board.doneColumnId = doneColumnId(board);
+  return board;
 }
 
 /**
@@ -253,10 +260,14 @@ function findColumn(store, id) {
 /**
  * Identify the "done" column id: the one with the highest `order` (for v1,
  * "done" = the last column). Returns null if the board has no columns.
+ *
+ * This is the single source of truth for "which column is done". It is exported
+ * (and surfaced on getBoard().doneColumnId) so the move route and the client do
+ * not each re-derive it with a divergent inline scan.
  * @param {Store} store
  * @returns {string|null}
  */
-function doneColumnId(store) {
+export function doneColumnId(store) {
   let done = null;
   let maxOrder = -Infinity;
   for (const col of store.columns) {

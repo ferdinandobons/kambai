@@ -2,7 +2,10 @@
 // so the FOCUSABLE selector and the Tab/Shift+Tab cycling logic live in ONE
 // place (previously duplicated across ConfirmModal, CardDetailModal, and missing
 // entirely from ColumnEditor). Any future tweak to the focusable heuristic
-// applies everywhere at once.
+// applies everywhere at once. Also hosts useInertBackground, the shared hook
+// that marks the board behind an open modal inert + aria-hidden.
+
+import { useEffect } from 'react';
 
 /** Selector for tabbable elements used by the focus trap. */
 export const FOCUSABLE =
@@ -30,4 +33,33 @@ export function trapTab(e, dialogEl) {
     e.preventDefault();
     first.focus();
   }
+}
+
+/**
+ * While `active`, mark the element returned by `getEl()` inert and aria-hidden so
+ * assistive tech and Tab cannot reach background content behind an open modal;
+ * restore the prior values on deactivate/unmount. Set imperatively (not as a JSX
+ * prop) because React 18 does not pass the `inert` attribute through reliably.
+ * The modal keeps its own focus trap; this just seals off everything else.
+ *
+ * @param {boolean} active - Whether a modal is currently open.
+ * @param {() => HTMLElement|null} getEl - Returns the background element to seal.
+ */
+export function useInertBackground(active, getEl) {
+  useEffect(() => {
+    if (!active) return undefined;
+    const el = getEl();
+    if (!el) return undefined;
+    const hadInert = el.hasAttribute('inert');
+    const prevAriaHidden = el.getAttribute('aria-hidden');
+    el.setAttribute('inert', '');
+    el.setAttribute('aria-hidden', 'true');
+    return () => {
+      if (!hadInert) el.removeAttribute('inert');
+      if (prevAriaHidden === null) el.removeAttribute('aria-hidden');
+      else el.setAttribute('aria-hidden', prevAriaHidden);
+    };
+    // getEl is a stable accessor (DOM lookup); re-run only when `active` flips.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 }

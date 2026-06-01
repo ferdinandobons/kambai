@@ -189,7 +189,10 @@ export async function parseSessionFile(filePath) {
       lastTimestamp = entry.timestamp;
     }
 
-    // gitBranch may appear on many line types; keep the most recent non-empty.
+    // gitBranch may appear on many line types; keep the LAST non-empty one in
+    // file order. The .jsonl is append-only and chronological (timestamps only
+    // advance as we scan), so the last in file order is also the most recent
+    // value — i.e. the branch the session is currently on.
     if (typeof entry.gitBranch === 'string' && entry.gitBranch.length > 0) {
       gitBranch = entry.gitBranch;
     }

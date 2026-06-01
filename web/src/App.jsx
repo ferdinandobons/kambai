@@ -9,6 +9,7 @@ import Board from './components/Board.jsx';
 import ColumnEditor from './components/ColumnEditor.jsx';
 import ConfirmModal from './components/ConfirmModal.jsx';
 import CardDetailModal from './components/CardDetailModal.jsx';
+import { useInertBackground } from './focusTrap.js';
 import { isReactivated, isWorthResuming } from './util.js';
 
 const SORT_STORAGE_KEY = 'kambai.sort';
@@ -78,6 +79,32 @@ export function mergeOverlay(session, store) {
   };
 }
 
+/**
+ * Resolve the board's "done" column id from a snapshot. The server attaches an
+ * authoritative `doneColumnId` to getBoard()/store.changed; mutation-route
+ * snapshots may omit it, so fall back to the SAME rule the server uses (the
+ * highest-`order` column) rather than keeping a divergent client definition.
+ * @param {{ doneColumnId?: string|null, columns?: object[] }} snapshot
+ * @returns {string|null}
+ */
+function resolveDoneColumnId(snapshot) {
+  if (!snapshot) return null;
+  if (snapshot.doneColumnId !== undefined && snapshot.doneColumnId !== null) {
+    return snapshot.doneColumnId;
+  }
+  const cols = snapshot.columns || [];
+  if (cols.length === 0) return null;
+  let done = null;
+  let maxOrder = -Infinity;
+  for (const col of cols) {
+    if ((col.order ?? 0) > maxOrder) {
+      maxOrder = col.order ?? 0;
+      done = col.id;
+    }
+  }
+  return done;
+}
+
 export default function App() {
   const [sessions, setSessions] = useState([]); // SessionMeta merged with overlay
   const [columns, setColumns] = useState([]);
@@ -103,6 +130,14 @@ export default function App() {
   // merged correctly without a stale closure.
   const storeRef = useRef({ columns: [], overlay: {} });
 
+  // The authoritative "done" column id, taken from the board snapshot
+  // (getBoard().doneColumnId / store.changed). This is the SINGLE definition
+  // shared by client, server and the move route — no local "last column by
+  // order" re-derivation. Mutation-route store.changed snapshots may omit it, so
+  // we fall back to deriving it from columns (the same highest-order rule the
+  // server uses) to preserve behavior across every event path.
+  const [doneColumnId, setDoneColumnId] = useState(null);
+
   // In-flight optimistic mutations keyed by session id. Each value is a partial
   // patch (e.g. { columnId, order } or { archived } or { customTitle, title }).
   // Set before a mutation's await, cleared in its finally. applyStore re-applies
@@ -114,6 +149,9 @@ export default function App() {
   // can read current session fields without a stale closure or re-creation.
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+
+  // The board-content wrapper, sealed inert + aria-hidden while a modal is open.
+  const mainRef = useRef(null);
 
   // Clear the keys a just-resolved mutation owns from its in-flight patch,
   // preserving any other field a concurrent mutation may still be holding. When
@@ -131,6 +169,7 @@ export default function App() {
     if (!store) return;
     storeRef.current = { columns: store.columns || [], overlay: store.overlay || {} };
     setColumns(store.columns || []);
+    setDoneColumnId(resolveDoneColumnId(store));
     // Re-merge overlay onto the sessions we already hold, then re-apply any
     // in-flight optimistic patch so a stale snapshot can't undo a pending op.
     const pending = pendingRef.current;
@@ -155,6 +194,13 @@ export default function App() {
           overlay: board.overlay || {},
         };
         setColumns(storeRef.current.columns);
+        // The board snapshot carries the authoritative doneColumnId.
+        setDoneColumnId(
+          resolveDoneColumnId({
+            doneColumnId: board.doneColumnId,
+            columns: storeRef.current.columns,
+          }),
+        );
         // /api/sessions already merges overlay fields; re-merge through the same
         // client-side mergeOverlay used by the SSE path so there is a single
         // merge rule (columnId/order/archived/lastDoneActivity from the store
@@ -317,17 +363,25 @@ export default function App() {
     );
     // Mark the moved card in-flight so a concurrent store.changed snapshot (still
     // showing the old placement) cannot revert it before this POST resolves.
-    pendingRef.current.set(id, { columnId, order: movedOrder });
+    // Merge with any existing in-flight patch (e.g. an archive/rename racing this
+    // move) so neither side's optimistic fields are dropped by a stale snapshot.
+    const prevPatch = pendingRef.current.get(id) || {};
+    pendingRef.current.set(id, { ...prevPatch, columnId, order: movedOrder });
     try {
       await api.moveCard(id, columnId, order);
     } catch (e) {
       setError(e.message || String(e));
     } finally {
-      pendingRef.current.delete(id);
+      // Clear ONLY the keys this move owns, preserving any field a concurrent
+      // archive/rename may still be holding (aligns with the archive/rename
+      // handlers; a bare delete(id) would wipe their patch).
+      clearPending(id, ['columnId', 'order']);
     }
   }, []);
 
   const handleArchive = useCallback(async (id, archived) => {
+    // Capture the pre-toggle value so a FAILED archive PATCH can roll back.
+    const prevArchived = sessionsRef.current.find((s) => s.id === id)?.archived ?? false;
     setSessions((prev) =>
       prev.map((s) => (s.id === id ? { ...s, archived } : s)),
     );
@@ -339,6 +393,11 @@ export default function App() {
       await api.archiveCard(id, archived);
     } catch (e) {
       setError(e.message || String(e));
+      // Roll back the optimistic archive flip so a failed PATCH does not leave
+      // the card in a state the server never confirmed.
+      setSessions((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, archived: prevArchived } : s)),
+      );
     } finally {
       clearPending(id, ['archived']);
     }
@@ -355,6 +414,10 @@ export default function App() {
     const cur = sessionsRef.current.find((s) => s.id === id);
     const base = cur?.originalTitle ?? cur?.title;
     const optimisticTitle = trimmed || base;
+    // Capture the pre-rename title/customTitle so a FAILED PATCH can roll back —
+    // otherwise the optimistic title sticks with no server snapshot to correct it.
+    const prevTitle = cur?.title;
+    const prevCustomTitle = cur?.customTitle ?? null;
     setSessions((prev) =>
       prev.map((s) => {
         if (s.id !== id) return s;
@@ -377,6 +440,13 @@ export default function App() {
       await api.setTitle(id, title);
     } catch (e) {
       setError(e.message || String(e));
+      // Roll back the optimistic rename to the captured pre-rename values so a
+      // failed PATCH does not leave a stale title the UI never corrects.
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === id ? { ...s, title: prevTitle, customTitle: prevCustomTitle } : s,
+        ),
+      );
     } finally {
       clearPending(id, ['title', 'customTitle']);
     }
@@ -445,13 +515,6 @@ export default function App() {
     for (const s of sessions) if (s.model) set.add(s.model);
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [sessions]);
-
-  // The done column mirrors the server's: the LAST column by order.
-  const doneColumnId = useMemo(() => {
-    if (columns.length === 0) return null;
-    const sorted = [...columns].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    return sorted[sorted.length - 1].id;
-  }, [columns]);
 
   const visibleSessions = useMemo(() => {
     const now = Date.now();
@@ -532,50 +595,61 @@ export default function App() {
     return counts;
   }, [sessions, columns]);
 
+  // Seal the board behind any open modal so SR/Tab can't reach it (the modals
+  // render outside .app-main, so they stay reachable with their own focus trap).
+  const anyModalOpen = !!detailSession || editorOpen || !!deleteTarget;
+  useInertBackground(anyModalOpen, () => mainRef.current);
+
   return (
     <div className="app">
-      <FilterBar
-        filters={filters}
-        onChange={patchFilters}
-        projects={projects}
-        models={models}
-        onOpenColumnEditor={() => setEditorOpen(true)}
-        visibleCount={visibleSessions.length}
-        totalCount={sessions.length}
-        worthCount={worthCount}
-      />
-
-      {error ? (
-        <div className="banner banner-error" role="alert">
-          <span>{error}</span>
-          <button type="button" className="icon-btn" onClick={() => setError(null)}>
-            ✕
-          </button>
-        </div>
-      ) : null}
-
-      {liveDisconnected ? (
-        <div className="banner banner-warn" role="status">
-          <span>Live updates disconnected — the board may be out of date. Refresh to reconnect.</span>
-        </div>
-      ) : null}
-
-      {loading ? (
-        <div className="state-msg">Loading sessions…</div>
-      ) : columns.length === 0 ? (
-        <div className="state-msg">No columns configured.</div>
-      ) : (
-        <Board
-          sessions={visibleSessions}
-          allSessions={sessions}
-          columns={columns}
-          sortKey={filters.sort}
-          onMove={handleMove}
-          onOpen={(s) => setDetailId(s.id)}
-          onArchive={handleArchive}
-          onDelete={(s) => setDeleteTarget(s)}
+      {/* Everything behind the modals. While any modal is open this wrapper is
+          marked inert + aria-hidden (useInertBackground) so SR/Tab can't reach
+          the board behind the dialog; the modals live OUTSIDE it, after the close
+          tag, so they stay reachable and keep their own focus trap. */}
+      <div className="app-main" ref={mainRef}>
+        <FilterBar
+          filters={filters}
+          onChange={patchFilters}
+          projects={projects}
+          models={models}
+          onOpenColumnEditor={() => setEditorOpen(true)}
+          visibleCount={visibleSessions.length}
+          totalCount={sessions.length}
+          worthCount={worthCount}
         />
-      )}
+
+        {error ? (
+          <div className="banner banner-error" role="alert">
+            <span>{error}</span>
+            <button type="button" className="icon-btn" onClick={() => setError(null)}>
+              ✕
+            </button>
+          </div>
+        ) : null}
+
+        {liveDisconnected ? (
+          <div className="banner banner-warn" role="status">
+            <span>Live updates disconnected — the board may be out of date. Refresh to reconnect.</span>
+          </div>
+        ) : null}
+
+        {loading ? (
+          <div className="state-msg">Loading sessions…</div>
+        ) : columns.length === 0 ? (
+          <div className="state-msg">No columns configured.</div>
+        ) : (
+          <Board
+            sessions={visibleSessions}
+            allSessions={sessions}
+            columns={columns}
+            sortKey={filters.sort}
+            onMove={handleMove}
+            onOpen={(s) => setDetailId(s.id)}
+            onArchive={handleArchive}
+            onDelete={(s) => setDeleteTarget(s)}
+          />
+        )}
+      </div>
 
       {detailSession ? (
         <CardDetailModal

@@ -224,17 +224,10 @@ export async function registerRoutes(fastify) {
     }
 
     // lastActivity is only consumed when entering the "done" column (the one with
-    // the highest order — mirrors store.doneColumnId). Resolving it costs a full
-    // directory walk + single-file parse, so skip it for every other drop and
-    // only pay that cost when stamping the done marker.
-    let doneCol = null;
-    let maxOrder = -Infinity;
-    for (const c of board.columns) {
-      if (c.order > maxOrder) {
-        maxOrder = c.order;
-        doneCol = c.id;
-      }
-    }
+    // the highest order). Resolving it costs a full directory walk + single-file
+    // parse, so skip it for every other drop and only pay that cost when stamping
+    // the done marker. doneColumnId is the single source of truth (store.js).
+    const doneCol = board.doneColumnId ?? store.doneColumnId(board);
     let lastActivity = null;
     if (columnId === doneCol) {
       const meta = await findSessionMeta(id);
@@ -304,7 +297,12 @@ export async function registerRoutes(fastify) {
       if (err && err.code === 'ENOENT') {
         return reply.code(404).send({ error: 'session not found' });
       }
-      throw err;
+      // Any other unlink failure (EACCES, EPERM, …) carries the OS error message
+      // AND the absolute file path. Rethrowing lets Fastify serialize err.message
+      // into the response body, disclosing a path under CLAUDE_PROJECTS_DIR. Log
+      // it server-side and reply with a generic 500 instead.
+      request.log.error(err, 'failed to delete session');
+      return reply.code(500).send({ error: 'failed to delete session' });
     }
 
     // Drop the overlay entry and notify clients (overlay change + removal). The
@@ -348,6 +346,15 @@ export async function registerRoutes(fastify) {
     const { ids } = request.body ?? {};
     if (!Array.isArray(ids) || !ids.every((x) => typeof x === 'string')) {
       return reply.code(400).send({ error: 'ids (string[]) is required' });
+    }
+    // Reject ids that are not current columns. store.reorderColumns silently
+    // ignores unknown ids, so without this an off-by-one client (e.g. a stale
+    // column id after a delete) would 200 yet not reorder as asked; a structured
+    // 400 mirrors the other routes' "must reference an existing column" guards.
+    const board = store.getBoard();
+    const knownIds = new Set(board.columns.map((c) => c.id));
+    if (!ids.every((id) => knownIds.has(id))) {
+      return reply.code(400).send({ error: 'ids must all reference existing columns' });
     }
     const updated = store.reorderColumns(ids);
     broadcastStore(updated);

@@ -69,14 +69,18 @@ export function getContextWindow(model) {
  * Decode an encoded project directory name back into a filesystem path
  * (best effort). Claude Code encodes a cwd by replacing every "/" with "-",
  * so a leading "-" maps to the leading "/". Inner dashes that were part of
- * real path segments cannot be perfectly recovered; this is intentionally a
- * best-effort reconstruction used for display.
+ * real path segments (hyphenated names, worktrees, dotfiles) cannot be
+ * perfectly recovered, so this reconstruction is LOSSY BY DESIGN.
+ *
+ * It is only a display fallback: sessionParser.js prefers the authoritative
+ * `cwd` recorded verbatim on each session line and falls back here just when no
+ * line carried a cwd. Do not rely on this round-tripping the original path.
  *
  * @example
  *   decodeProjectDir('-Users-x-y') // => '/Users/x/y'
  *
  * @param {string} name - Encoded directory name.
- * @returns {string} Best-effort decoded path.
+ * @returns {string} Best-effort, lossy decoded path (display fallback only).
  */
 export function decodeProjectDir(name) {
   if (typeof name !== 'string' || name.length === 0) {

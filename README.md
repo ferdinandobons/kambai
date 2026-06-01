@@ -53,6 +53,29 @@ each one into a card (title, model, context %, message count, last activity, git
 merges it with your Kanban placement from `data/store.json`, and serves it to the board.
 A `chokidar` watcher streams additions, changes, and removals to the UI.
 
+## Live updates (SSE)
+
+The board stays in sync over a single **Server-Sent Events** stream at `GET /events`.
+The browser subscribes once on load (`EventSource`) and the backend pushes a JSON event
+on every change — no polling. Each message is a JSON object with a `type`:
+
+| Event | When | Payload |
+| --- | --- | --- |
+| `session.added` | A new `.jsonl` session appears under `~/.claude/projects/`. | `{ session }` (a parsed `SessionMeta`). |
+| `session.updated` | An existing session file changes (new activity, context, title…). | `{ session }`. |
+| `session.removed` | A session file is unlinked (or **Delete permanently** runs). | `{ id }`. |
+| `store.changed` | The Kanban state changes — a card move/archive/rename or a column add/rename/reorder/delete. | `{ store }` (the full board snapshot, including the authoritative `doneColumnId`). |
+
+The client also surfaces two synthetic connection events (not sent by the server) so a dead
+stream is never silent:
+
+- `connection.open` — the stream (re)connected; clears any disconnect notice.
+- `connection.error` — an error occurred. When the browser will **not** auto-reconnect
+  (`readyState === CLOSED`), the event carries `fatal: true`.
+
+On a fatal disconnect the UI shows a **"Live updates disconnected — the board may be out of
+date. Refresh to reconnect."** banner; a successful reconnect (`connection.open`) clears it.
+
 ## Install
 
 From the repository root:

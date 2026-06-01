@@ -20,7 +20,16 @@ export default defineConfig({
     },
   },
   test: {
+    // The pure helper tests (util/resume/mergeOverlay) stay in the fast `node`
+    // environment by default. Only the DOM/component/integration tests under
+    // test/dom/** opt into jsdom (via environmentMatchGlobs), so the existing
+    // suite never pays the jsdom setup cost and keeps its exact behavior.
     environment: 'node',
-    include: ['test/**/*.test.js'],
+    include: ['test/**/*.test.{js,jsx}'],
+    environmentMatchGlobs: [['test/dom/**', 'jsdom']],
+    // setupFiles run per-test-file; the setup here is jsdom-only (it pulls in
+    // @testing-library/jest-dom matchers + cleanup), so guard it so the node
+    // tests don't load DOM-only code.
+    setupFiles: ['./test/dom/setup.js'],
   },
 });

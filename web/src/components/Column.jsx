@@ -27,7 +27,9 @@ export default function Column({ column, sessions, onOpen, onArchive, onDelete }
       <header className="column-header">
         <span className="column-dot" style={{ background: column.color || 'var(--accent)' }} />
         <h2 className="column-name">{column.name}</h2>
-        <span className="column-count">{sessions.length}</span>
+        <span className="column-count" aria-label={`${sessions.length} cards`}>
+          {sessions.length}
+        </span>
       </header>
 
       <div ref={setNodeRef} className="column-body">

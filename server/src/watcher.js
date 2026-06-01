@@ -178,7 +178,11 @@ export function startSessionWatcher(onEvent) {
         // (not just the originating client's columns[0] fallback).
         emit({ type: 'store.changed', store: store.getBoard() });
       } catch {
-        // File may have been removed or be unreadable; ignore.
+        // File may have been removed (or be unreadable) between the event and the
+        // read — e.g. an editor's atomic-rename create-then-replace. If we already
+        // ensurePlaced'd before the read failed, the overlay row is a harmless
+        // orphan that the next GET /api/sessions reconciliation (pruneOverlay
+        // against the on-disk scan) self-heals. Nothing to do here.
       }
     },
     onChange: async (filePath) => {
