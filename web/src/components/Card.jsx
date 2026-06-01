@@ -5,7 +5,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { timeAgo, contextColor } from '../util.js';
+import { timeAgo, contextColor, isReactivated, resumeCommand } from '../util.js';
+import CopyToast, { useCopyToast } from './CopyToast.jsx';
 
 /**
  * Shorten a model id for display, e.g. "claude-opus-4-7" → "opus-4-7".
@@ -15,18 +16,6 @@ import { timeAgo, contextColor } from '../util.js';
 function shortModel(model) {
   if (!model) return '';
   return model.replace(/^claude-/, '');
-}
-
-/**
- * Has this card been "reactivated"? True when new activity arrived after the
- * card was last moved into a done column (lastActivity > lastDoneActivity).
- * @param {object} session
- * @returns {boolean}
- */
-function isReactivated(session) {
-  const done = session.lastDoneActivity;
-  if (!done || !session.lastActivity) return false;
-  return new Date(session.lastActivity).getTime() > new Date(done).getTime();
 }
 
 /**
@@ -61,6 +50,7 @@ export function CardView({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const menuButtonRef = useRef(null);
+  const { copied, copy } = useCopyToast();
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -155,6 +145,21 @@ export function CardView({
                   onClick={(e) => {
                     e.stopPropagation();
                     setMenuOpen(false);
+                    menuButtonRef.current?.focus();
+                    // Pure client affordance: copy the resume command so the user
+                    // can paste it into a terminal. No backend, read-only.
+                    copy(resumeCommand(session));
+                  }}
+                >
+                  Copy resume command
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
                     // Restore focus to the menu button before the menu unmounts,
                     // matching the Escape path, so keyboard focus doesn't fall to
                     // <body>. (Archive keeps the card in place; for Delete the
@@ -180,6 +185,7 @@ export function CardView({
                 </button>
               </div>
             ) : null}
+            <CopyToast show={copied} className="copy-toast-card" />
           </div>
         </div>
 

@@ -77,3 +77,150 @@ export function contextColor(pct) {
   if (pct <= 80) return 'var(--ctx-amber)';
   return 'var(--ctx-red)';
 }
+
+/**
+ * Has this card been "reactivated"? True when new activity arrived after the
+ * card was last moved into a done column (lastActivity > lastDoneActivity).
+ * Compares via parsed timestamps; returns false when either is missing/unparseable.
+ *
+ * @param {object} session - SessionMeta merged with overlay fields.
+ * @returns {boolean}
+ */
+export function isReactivated(session) {
+  if (!session) return false;
+  const done = toMillis(session.lastDoneActivity);
+  const last = toMillis(session.lastActivity);
+  if (done == null || last == null) return false;
+  return last > done;
+}
+
+/**
+ * Build the shell command that resumes a session in Claude.
+ * Prefixes a `cd <projectPath>` when the session carries one.
+ *
+ * @param {object} session - SessionMeta (uses id and projectPath).
+ * @returns {string}
+ */
+export function resumeCommand(session) {
+  const id = session?.id ?? '';
+  const path = session?.projectPath;
+  const resume = `claude --resume ${id}`;
+  // Single-quote the path so it survives paste into a shell when it contains
+  // spaces or other shell-significant characters. Escape any embedded single
+  // quotes with the standard '\'' idiom (close quote, escaped quote, reopen).
+  return path ? `cd '${String(path).replace(/'/g, "'\\''")}' && ${resume}` : resume;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Recency boost used by resumeScore: a session touched recently is more worth
+ * resuming. Buckets by age relative to `nowMs`.
+ *
+ * @param {string|number|Date} lastActivity
+ * @param {number} nowMs - reference "now" as epoch ms (callers pass this so the
+ *   function is deterministic / unit-testable — it never reads the clock).
+ * @returns {number} 30 (≤1d), 20 (≤3d), 10 (≤7d), else 0.
+ */
+function recencyBoost(lastActivity, nowMs) {
+  const last = toMillis(lastActivity);
+  if (last == null) return 0;
+  const ageMs = nowMs - last;
+  if (ageMs <= DAY_MS) return 30;
+  if (ageMs <= 3 * DAY_MS) return 20;
+  if (ageMs <= 7 * DAY_MS) return 10;
+  return 0;
+}
+
+/**
+ * Score how worth-resuming a session is (higher = more worth resuming).
+ * Archived and done-column sessions always score 0.
+ *
+ * leverage = (contextPct || 0)
+ *          + recencyBoost(lastActivity vs nowMs)
+ *          + (isReactivated ? 25 : 0)
+ *
+ * @param {object} session
+ * @param {{ doneColumnId: string|null, nowMs: number }} opts - callers pass an
+ *   explicit `nowMs` epoch so the score is deterministic / unit-testable.
+ * @returns {number}
+ */
+export function resumeScore(session, { doneColumnId, nowMs } = {}) {
+  if (!session) return 0;
+  if (session.archived || session.columnId === doneColumnId) return 0;
+  const base = session.contextPct || 0;
+  return base + recencyBoost(session.lastActivity, nowMs) + (isReactivated(session) ? 25 : 0);
+}
+
+/**
+ * Quick predicate: is this session worth resuming at all? True when it is NOT
+ * archived AND not in the done column AND any of:
+ *   - context usage is at least 50%
+ *   - it has been reactivated
+ *   - its last activity is within 2 days of nowMs
+ *
+ * @param {object} session
+ * @param {{ doneColumnId: string|null, nowMs: number }} opts - explicit `nowMs`
+ *   epoch keeps this deterministic / unit-testable.
+ * @returns {boolean}
+ */
+export function isWorthResuming(session, { doneColumnId, nowMs } = {}) {
+  if (!session) return false;
+  if (session.archived) return false;
+  if (session.columnId === doneColumnId) return false;
+  if ((session.contextPct ?? 0) >= 50) return true;
+  if (isReactivated(session)) return true;
+  const last = toMillis(session.lastActivity);
+  if (last != null && nowMs - last <= 2 * DAY_MS) return true;
+  return false;
+}
+
+/**
+ * Build a comparator(a, b) for sorting sessions by a named key. Used by the
+ * Board to lay out each column's cards.
+ *
+ *   board    — by (order asc) then (lastActivity desc): the EXISTING column
+ *              behavior.
+ *   activity — lastActivity desc.
+ *   context  — contextPct desc (null/undefined sort last).
+ *   messages — messageCount desc.
+ *   created  — createdAt desc.
+ *
+ * Unknown keys fall back to 'board'.
+ *
+ * @param {'board'|'activity'|'context'|'messages'|'created'} sortKey
+ * @returns {(a: object, b: object) => number}
+ */
+export function sessionComparator(sortKey) {
+  const lastActivityDesc = (a, b) =>
+    (toMillis(b.lastActivity) ?? 0) - (toMillis(a.lastActivity) ?? 0);
+
+  switch (sortKey) {
+    case 'activity':
+      return lastActivityDesc;
+    case 'context':
+      return (a, b) => {
+        // null/undefined contextPct sort last regardless of direction.
+        const av = a.contextPct;
+        const bv = b.contextPct;
+        const aNull = av == null;
+        const bNull = bv == null;
+        if (aNull && bNull) return 0;
+        if (aNull) return 1;
+        if (bNull) return -1;
+        return bv - av;
+      };
+    case 'messages':
+      return (a, b) => (b.messageCount ?? 0) - (a.messageCount ?? 0);
+    case 'created':
+      return (a, b) => (toMillis(b.createdAt) ?? 0) - (toMillis(a.createdAt) ?? 0);
+    case 'board':
+    default:
+      return (a, b) => {
+        const ao = a.order ?? 0;
+        const bo = b.order ?? 0;
+        if (ao !== bo) return ao - bo;
+        return lastActivityDesc(a, b);
+      };
+  }
+}

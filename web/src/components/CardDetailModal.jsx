@@ -4,8 +4,9 @@
 // lastPrompt, and footer actions (archive/restore, delete, close).
 
 import { useEffect, useRef, useState } from 'react';
-import { timeAgo } from '../util.js';
+import { timeAgo, resumeCommand } from '../util.js';
 import { trapTab } from '../focusTrap.js';
+import CopyToast, { useCopyToast } from './CopyToast.jsx';
 
 /** Display a value, falling back to an em dash for empty/missing values. */
 function display(value) {
@@ -35,6 +36,7 @@ export default function CardDetailModal({ session, onClose, onRename, onArchive,
   const dialogRef = useRef(null);
   const titleInputRef = useRef(null);
   const [draft, setDraft] = useState('');
+  const { copied, copy } = useCopyToast();
 
   const sessionId = session?.id;
   const effectiveTitle = session?.title ?? '';
@@ -129,10 +131,20 @@ export default function CardDetailModal({ session, onClose, onRename, onArchive,
             aria-label="Session title"
             placeholder="Untitled session"
           />
+          <button
+            type="button"
+            className="btn btn-resume"
+            onClick={() => copy(resumeCommand(session))}
+            title={resumeCommand(session)}
+          >
+            Resume
+          </button>
           <button type="button" className="btn btn-primary" onClick={save} disabled={unchanged}>
             Save
           </button>
         </div>
+
+        <CopyToast show={copied} className="copy-toast-detail" />
 
         {hasCustom ? (
           <div className="detail-title-hint">

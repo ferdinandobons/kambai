@@ -56,14 +56,56 @@ body {
 
 /* ---------- Filter bar ---------- */
 
+.filterbar-wrap {
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+
 .filterbar {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 16px;
-  background: var(--bg-elev);
-  border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
+}
+
+/* ---------- Quick-filter chips ---------- */
+
+.chip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 10px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  background: var(--surface);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.chip:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.chip-active {
+  background: rgba(91, 157, 255, 0.16);
+  border-color: rgba(91, 157, 255, 0.5);
+  color: var(--accent);
+}
+
+.chip-active:hover {
+  background: rgba(91, 157, 255, 0.22);
+  color: var(--accent);
 }
 
 .brand {
@@ -233,6 +275,16 @@ body {
 }
 
 /* ---------- Board ---------- */
+
+.board-sort-hint {
+  margin: 10px 16px 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+}
 
 .board {
   flex: 1;
@@ -637,6 +689,53 @@ body {
   color: var(--accent-strong);
   text-decoration: underline;
   background: transparent;
+}
+
+/* Resume button: a green-accented primary affordance (it kicks off the
+   "resume in your terminal" flow via clipboard). */
+.btn-resume {
+  background: rgba(52, 211, 153, 0.14);
+  border-color: rgba(52, 211, 153, 0.5);
+  color: var(--ctx-green);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.btn-resume:hover {
+  background: rgba(52, 211, 153, 0.22);
+}
+
+/* ---------- Copy-to-clipboard toast ---------- */
+
+.copy-toast {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ctx-green);
+  pointer-events: none;
+}
+
+.copy-toast-show {
+  background: var(--bg-elev-2);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  border-radius: var(--radius-sm);
+  padding: 4px 9px;
+  box-shadow: var(--shadow);
+  white-space: nowrap;
+}
+
+/* Toast anchored to a card's actions menu (top-right of the card). */
+.copy-toast-card {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  z-index: 25;
+}
+
+/* Toast inside the detail modal: a quiet inline confirmation under the title. */
+.copy-toast-detail {
+  margin-top: 8px;
+  min-height: 18px;
 }
 
 /* ---------- Card detail modal ---------- */

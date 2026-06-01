@@ -15,14 +15,17 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import Column from './Column.jsx';
 import Card, { CardView } from './Card.jsx';
+import { sessionComparator } from '../util.js';
 
 /**
- * Group sessions by their columnId, each group sorted by `order` then lastActivity.
+ * Group sessions by their columnId, each group sorted with the comparator for
+ * `sortKey` ('board' = the existing order-then-lastActivity behavior).
  * @param {object[]} sessions
  * @param {object[]} columns
+ * @param {string} [sortKey]
  * @returns {Map<string, object[]>}
  */
-function groupByColumn(sessions, columns) {
+function groupByColumn(sessions, columns, sortKey = 'board') {
   const map = new Map();
   for (const col of columns) map.set(col.id, []);
   const fallback = columns[0]?.id;
@@ -32,14 +35,9 @@ function groupByColumn(sessions, columns) {
     if (!map.has(colId)) map.set(colId, []);
     map.get(colId).push(s);
   }
+  const compare = sessionComparator(sortKey);
   for (const list of map.values()) {
-    list.sort((a, b) => {
-      const ao = a.order ?? 0;
-      const bo = b.order ?? 0;
-      if (ao !== bo) return ao - bo;
-      // tiebreak: most recent first
-      return new Date(b.lastActivity || 0) - new Date(a.lastActivity || 0);
-    });
+    list.sort(compare);
   }
   return map;
 }
@@ -55,6 +53,7 @@ function groupByColumn(sessions, columns) {
  * @param {(session: object) => void} [props.onOpen] - open the details modal.
  * @param {(id: string, archived: boolean) => void} props.onArchive
  * @param {(session: object) => void} props.onDelete
+ * @param {string} [props.sortKey] - how to order cards within each column.
  * @returns {JSX.Element}
  */
 export default function Board({
@@ -65,6 +64,7 @@ export default function Board({
   onOpen,
   onArchive,
   onDelete,
+  sortKey = 'board',
 }) {
   const [activeId, setActiveId] = useState(null);
 
@@ -73,11 +73,16 @@ export default function Board({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const grouped = useMemo(() => groupByColumn(sessions, columns), [sessions, columns]);
-  // Full (unfiltered) column membership, sorted the same way the visible board is.
-  // Used to map a filtered drop position to a full-column index for onMove.
+  const grouped = useMemo(
+    () => groupByColumn(sessions, columns, sortKey),
+    [sessions, columns, sortKey],
+  );
+  // Full (unfiltered) column membership. Drop-index math (and the server's
+  // renumber) is always anchored on the canonical BOARD order, independent of
+  // the current view sort — so cross-column drag-and-drop keeps working exactly
+  // as today even when the visible cards are sorted by another key.
   const groupedAll = useMemo(
-    () => groupByColumn(allSessions || sessions, columns),
+    () => groupByColumn(allSessions || sessions, columns, 'board'),
     [allSessions, sessions, columns],
   );
   const byId = useMemo(() => {
@@ -98,6 +103,14 @@ export default function Board({
   const handleDragStart = (event) => setActiveId(event.active.id);
   const handleDragCancel = () => setActiveId(null);
 
+  // Manual drop position only carries meaning under 'board' sort: the non-board
+  // comparators ignore `order`, so a freshly-renumbered card would just re-sort
+  // by its active key and snap away from where it was dropped. Under any other
+  // sort we therefore only honor CROSS-column moves (column membership is real)
+  // and append the card at the end of the destination — never reorder within a
+  // column (which would be a silent no-op / jump). See the hint in render().
+  const orderingMeaningful = sortKey === 'board';
+
   const handleDragEnd = (event) => {
     setActiveId(null);
     const { active, over } = event;
@@ -113,28 +126,40 @@ export default function Board({
     // card's real position in the full column.
     const fullList = groupedAll.get(overColId) || [];
 
-    let newIndex;
-    if (grouped.has(over.id)) {
-      // dropped onto the column container (empty area) → append after all cards
-      newIndex = fullList.length;
-    } else {
-      const overIndex = fullList.findIndex((s) => s.id === over.id);
-      newIndex = overIndex < 0 ? fullList.length : overIndex;
-    }
-
     if (activeColId === overColId) {
+      // Same-column drop. Only honor the drop position under 'board' sort; under
+      // a non-board sort the visible order is not the board order, so reordering
+      // here is meaningless — leave the card where it is.
+      if (!orderingMeaningful) return;
       const oldIndex = fullList.findIndex((s) => s.id === active.id);
       if (oldIndex < 0) return;
+      let newIndex;
+      if (grouped.has(over.id)) {
+        newIndex = fullList.length;
+      } else {
+        const overIndex = fullList.findIndex((s) => s.id === over.id);
+        newIndex = overIndex < 0 ? fullList.length : overIndex;
+      }
       if (oldIndex === newIndex) return;
       // The order value is the destination index after reordering.
       const reordered = arrayMove(fullList, oldIndex, newIndex);
       const finalIndex = reordered.findIndex((s) => s.id === active.id);
       onMove?.(active.id, overColId, finalIndex, reordered);
     } else {
-      // Cross-column move: build the destination's new full ordering so the
-      // optimistic state matches what the server will renumber to.
+      // Cross-column move. Under 'board' sort, honor the visual drop position;
+      // under a non-board sort the visible order isn't the board order, so the
+      // `over` card's board index is meaningless — append at the end instead.
+      let insertAt;
+      if (orderingMeaningful && !grouped.has(over.id)) {
+        const overIndex = fullList.findIndex((s) => s.id === over.id);
+        insertAt = overIndex < 0 ? fullList.length : overIndex;
+      } else {
+        insertAt = fullList.length;
+      }
+      // Build the destination's new full ordering so the optimistic state
+      // matches what the server will renumber to.
       const reordered = fullList.slice();
-      const insertAt = Math.min(newIndex, reordered.length);
+      insertAt = Math.min(insertAt, reordered.length);
       reordered.splice(insertAt, 0, byId.get(active.id) || { id: active.id });
       onMove?.(active.id, overColId, insertAt, reordered);
     }
@@ -148,6 +173,13 @@ export default function Board({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
+      {!orderingMeaningful ? (
+        <div className="board-sort-hint" role="status">
+          Cards are sorted by the active view — drag still moves cards between
+          columns, but manual ordering within a column only applies in “Board
+          order”.
+        </div>
+      ) : null}
       <div className="board">
         {columns.map((col) => (
           <Column

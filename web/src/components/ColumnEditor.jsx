@@ -68,17 +68,22 @@ export default function ColumnEditor({
   // Read the current draft for a column, defaulting to its committed name.
   const nameValue = (col) => (col.id in draftNames ? draftNames[col.id] : col.name);
 
+  // Drop a column's buffered draft so the input reflects the authoritative
+  // column name again. Shared by commitName and the Escape-to-discard handler.
+  const discardDraft = (id) =>
+    setDraftNames((d) => {
+      if (!(id in d)) return d;
+      const { [id]: _drop, ...rest } = d;
+      return rest;
+    });
+
   // Commit a buffered rename: only fire onRename when the trimmed name actually
   // changed and is non-empty (the server rejects blank names). Then drop the
   // draft so the input reflects the authoritative column name again.
   const commitName = (col) => {
     const next = (col.id in draftNames ? draftNames[col.id] : col.name).trim();
     if (next && next !== col.name) onRename?.(col.id, next);
-    setDraftNames((d) => {
-      if (!(col.id in d)) return d;
-      const { [col.id]: _drop, ...rest } = d;
-      return rest;
-    });
+    discardDraft(col.id);
   };
 
   const move = (id, dir) => {
@@ -155,10 +160,7 @@ export default function ColumnEditor({
                   } else if (e.key === 'Escape') {
                     // Discard the in-progress edit and revert to the saved name.
                     e.stopPropagation();
-                    setDraftNames((d) => {
-                      const { [col.id]: _drop, ...rest } = d;
-                      return rest;
-                    });
+                    discardDraft(col.id);
                   }
                 }}
                 aria-label={`Column name ${col.name}`}

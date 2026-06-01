@@ -31,6 +31,13 @@ Server-Sent Events.
   context, full last prompt, session id) and **rename its title** right there. The rename is
   stored as an override in `data/store.json` — your session files are never modified, and a
   *Reset to original* is one click away.
+- **Copy resume command** — one click on a card copies `cd <path> && claude --resume <id>`
+  to your clipboard. Kambai stays read-only — it hands you the command, you run it.
+- **Triage: "Worth resuming"** — a built-in ranking (high context + recent + reactivated)
+  surfaces the sessions actually worth reopening, with a one-click filter and a count badge.
+- **Sort, quick filters & deep links** — sort by last activity / context % / messages /
+  created (remembered across reloads), one-tap chips (Worth resuming, High context, Recent,
+  Reactivated), and shareable `?session=<id>` links that open a card on load.
 - **Customizable columns** — rename, add, reorder, and delete columns; the defaults are
   *To do / In progress / Done*.
 - **"Reactivated" detection** — a card you moved to a done column that later receives new

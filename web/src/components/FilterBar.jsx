@@ -1,16 +1,32 @@
 // FilterBar.jsx — filters: project, date range (last N days), model, text search
-// on the title, plus a "Show archived" toggle. Controlled by App via the
-// `filters` object and `onChange`.
+// on the title, plus a "Show archived" toggle, a sort selector and a row of
+// quick-filter chips. Controlled by App via the `filters` object and `onChange`.
+
+const SORT_OPTIONS = [
+  { value: 'board', label: 'Board order' },
+  { value: 'activity', label: 'Last activity' },
+  { value: 'context', label: 'Context %' },
+  { value: 'messages', label: 'Messages' },
+  { value: 'created', label: 'Created' },
+];
+
+const QUICK_CHIPS = [
+  { value: 'worth', label: 'Worth resuming' }, // label gets the (N) count appended
+  { value: 'high', label: 'High context' },
+  { value: 'recent', label: 'Recent 7d' },
+  { value: 'reactivated', label: 'Reactivated' },
+];
 
 /**
  * @param {Object} props
- * @param {object} props.filters - { project, days, model, search, showArchived }
+ * @param {object} props.filters - { project, days, model, search, showArchived, sort, quick }
  * @param {(patch: object) => void} props.onChange - merge-patches the filter state.
  * @param {string[]} props.projects - distinct project names present in the data.
  * @param {string[]} props.models - distinct model ids present in the data.
  * @param {() => void} [props.onOpenColumnEditor]
  * @param {number} [props.visibleCount]
  * @param {number} [props.totalCount]
+ * @param {number} [props.worthCount] - count of sessions worth resuming (chip badge).
  * @returns {JSX.Element}
  */
 export default function FilterBar({
@@ -21,6 +37,7 @@ export default function FilterBar({
   onOpenColumnEditor,
   visibleCount,
   totalCount,
+  worthCount = 0,
 }) {
   const dayOptions = [
     { value: 0, label: 'Any time' },
@@ -30,7 +47,11 @@ export default function FilterBar({
     { value: 90, label: '90 days' },
   ];
 
+  // Clicking the active chip clears it; clicking another switches to it.
+  const toggleQuick = (value) => onChange({ quick: filters.quick === value ? '' : value });
+
   return (
+    <div className="filterbar-wrap">
     <div className="filterbar">
       <div className="brand">
         <span className="brand-logo" aria-hidden="true">KAI</span>
@@ -87,6 +108,19 @@ export default function FilterBar({
         ))}
       </select>
 
+      <select
+        className="filter-input"
+        value={filters.sort}
+        onChange={(e) => onChange({ sort: e.target.value })}
+        aria-label="Sort by"
+      >
+        {SORT_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+
       <label className="filter-toggle">
         <input
           type="checkbox"
@@ -109,6 +143,25 @@ export default function FilterBar({
       <button type="button" className="btn" onClick={onOpenColumnEditor}>
         Columns
       </button>
+    </div>
+
+    <div className="chip-row" role="group" aria-label="Quick filters">
+      {QUICK_CHIPS.map((chip) => {
+        const active = filters.quick === chip.value;
+        const label = chip.value === 'worth' ? `${chip.label} (${worthCount})` : chip.label;
+        return (
+          <button
+            key={chip.value}
+            type="button"
+            className={`chip${active ? ' chip-active' : ''}`}
+            aria-pressed={active}
+            onClick={() => toggleQuick(chip.value)}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
     </div>
   );
 }

@@ -9,6 +9,20 @@ import Board from './components/Board.jsx';
 import ColumnEditor from './components/ColumnEditor.jsx';
 import ConfirmModal from './components/ConfirmModal.jsx';
 import CardDetailModal from './components/CardDetailModal.jsx';
+import { isReactivated, isWorthResuming } from './util.js';
+
+const SORT_STORAGE_KEY = 'kambai.sort';
+const VALID_SORTS = ['board', 'activity', 'context', 'messages', 'created'];
+
+/** Read the persisted sort key from localStorage, falling back to 'board'. */
+function readStoredSort() {
+  try {
+    const v = localStorage.getItem(SORT_STORAGE_KEY);
+    return VALID_SORTS.includes(v) ? v : 'board';
+  } catch {
+    return 'board';
+  }
+}
 
 const DEFAULT_FILTERS = {
   project: '',
@@ -16,7 +30,12 @@ const DEFAULT_FILTERS = {
   days: 0, // 0 = always
   search: '',
   showArchived: false,
+  sort: readStoredSort(), // hydrated from localStorage 'kambai.sort'
+  quick: '', // active quick-filter chip ('' = none)
 };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Merge a store's overlay into a SessionMeta so each card carries columnId,
@@ -70,6 +89,16 @@ export default function App() {
   const [detailId, setDetailId] = useState(null); // session id whose details modal is open
   const [liveDisconnected, setLiveDisconnected] = useState(false); // SSE stream dead
 
+  // Capture the ?session=<id> deep-link target ONCE at first render — before the
+  // URL-sync effect below runs and (with detailId still null) deletes the param.
+  const [pendingDeepLink] = useState(() => {
+    try {
+      return new URL(window.location.href).searchParams.get('session');
+    } catch {
+      return null;
+    }
+  });
+
   // Keep the latest store (columns + overlay) so SSE session.* events can be
   // merged correctly without a stale closure.
   const storeRef = useRef({ columns: [], overlay: {} });
@@ -80,6 +109,23 @@ export default function App() {
   // these on top of each merged session so a store.changed snapshot that is still
   // stale for an in-flight move/archive/rename cannot visibly revert it.
   const pendingRef = useRef(new Map());
+
+  // Mirror of the latest `sessions` so empty-dep callbacks (handleRenameTitle)
+  // can read current session fields without a stale closure or re-creation.
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+
+  // Clear the keys a just-resolved mutation owns from its in-flight patch,
+  // preserving any other field a concurrent mutation may still be holding. When
+  // nothing remains, drop the entry entirely. Called from each handler's finally.
+  const clearPending = (id, keys) => {
+    const cur = pendingRef.current.get(id);
+    if (!cur) return;
+    const rest = { ...cur };
+    for (const k of keys) delete rest[k];
+    if (Object.keys(rest).length > 0) pendingRef.current.set(id, rest);
+    else pendingRef.current.delete(id);
+  };
 
   const applyStore = useCallback((store) => {
     if (!store) return;
@@ -210,6 +256,43 @@ export default function App() {
     setFilters((f) => ({ ...f, ...patch }));
   }, []);
 
+  // Persist the sort key whenever it changes, so it survives reloads.
+  useEffect(() => {
+    try {
+      localStorage.setItem(SORT_STORAGE_KEY, filters.sort);
+    } catch {
+      // localStorage may be unavailable (private mode / disabled); ignore.
+    }
+  }, [filters.sort]);
+
+  // Deep links: reflect the open detail card in the URL as ?session=<id> using
+  // the History API only (no reload, no router dep). Clear it when the modal
+  // closes. replaceState keeps the back button behavior unchanged.
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (detailId) url.searchParams.set('session', detailId);
+      else url.searchParams.delete('session');
+      window.history.replaceState(window.history.state, '', url);
+    } catch {
+      // Non-browser env or blocked history API; ignore.
+    }
+  }, [detailId]);
+
+  // On first load (after sessions arrive), open the modal for ?session=<uuid>
+  // when such a session exists. Guarded by a ref so it only fires once.
+  const deepLinkApplied = useRef(false);
+  useEffect(() => {
+    if (deepLinkApplied.current || loading) return;
+    deepLinkApplied.current = true;
+    // Use the param captured at first render (pendingDeepLink); re-reading the URL
+    // here would find it already cleared by the sync effect above.
+    const param = pendingDeepLink;
+    if (param && UUID_RE.test(param) && sessions.some((s) => s.id === param)) {
+      setDetailId(param);
+    }
+  }, [loading, sessions, pendingDeepLink]);
+
   // ---- Mutations (optimistic + server reconciles via store.changed) ----
 
   const handleMove = useCallback(async (id, columnId, order, reordered) => {
@@ -257,25 +340,24 @@ export default function App() {
     } catch (e) {
       setError(e.message || String(e));
     } finally {
-      const cur = pendingRef.current.get(id);
-      if (cur) {
-        const { archived: _drop, ...rest } = cur;
-        if (Object.keys(rest).length > 0) pendingRef.current.set(id, rest);
-        else pendingRef.current.delete(id);
-      }
+      clearPending(id, ['archived']);
     }
   }, []);
 
   const handleRenameTitle = useCallback(async (id, title) => {
     // Optimistically apply the effective-title rule locally: a blank override
     // resets the card to its parsed original; otherwise the override wins.
+    // Compute the effective title up front from the CURRENT session (read via a
+    // ref, not a stale closure) so both the optimistic state and the in-flight
+    // patch carry the same computed value — a React-18 functional updater runs
+    // during reconciliation, so anything assigned inside it is not available here.
     const trimmed = title.trim();
-    let optimisticTitle = null;
+    const cur = sessionsRef.current.find((s) => s.id === id);
+    const base = cur?.originalTitle ?? cur?.title;
+    const optimisticTitle = trimmed || base;
     setSessions((prev) =>
       prev.map((s) => {
         if (s.id !== id) return s;
-        const base = s.originalTitle ?? s.title;
-        optimisticTitle = trimmed || base;
         return {
           ...s,
           title: optimisticTitle,
@@ -288,7 +370,7 @@ export default function App() {
     const prevPatch = pendingRef.current.get(id) || {};
     pendingRef.current.set(id, {
       ...prevPatch,
-      title: optimisticTitle ?? title,
+      title: optimisticTitle,
       customTitle: trimmed || null,
     });
     try {
@@ -296,12 +378,7 @@ export default function App() {
     } catch (e) {
       setError(e.message || String(e));
     } finally {
-      const cur = pendingRef.current.get(id);
-      if (cur) {
-        const { title: _t, customTitle: _ct, ...rest } = cur;
-        if (Object.keys(rest).length > 0) pendingRef.current.set(id, rest);
-        else pendingRef.current.delete(id);
-      }
+      clearPending(id, ['title', 'customTitle']);
     }
   }, []);
 
@@ -369,10 +446,36 @@ export default function App() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [sessions]);
 
+  // The done column mirrors the server's: the LAST column by order.
+  const doneColumnId = useMemo(() => {
+    if (columns.length === 0) return null;
+    const sorted = [...columns].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    return sorted[sorted.length - 1].id;
+  }, [columns]);
+
   const visibleSessions = useMemo(() => {
     const now = Date.now();
-    const sinceMs = filters.days > 0 ? now - filters.days * 24 * 60 * 60 * 1000 : null;
+    const sinceMs = filters.days > 0 ? now - filters.days * DAY_MS : null;
     const q = filters.search.trim().toLowerCase();
+
+    // Quick-filter chip predicate, evaluated with a single `now` per recompute.
+    const quickMatch = (s) => {
+      switch (filters.quick) {
+        case 'worth':
+          return isWorthResuming(s, { doneColumnId, nowMs: now });
+        case 'high':
+          return (s.contextPct ?? 0) > 80;
+        case 'recent': {
+          const t = new Date(s.lastActivity || 0).getTime();
+          return !Number.isNaN(t) && now - t <= 7 * DAY_MS;
+        }
+        case 'reactivated':
+          return isReactivated(s);
+        default:
+          return true;
+      }
+    };
+
     return sessions.filter((s) => {
       if (!filters.showArchived && s.archived) return false;
       if (filters.project && s.projectName !== filters.project) return false;
@@ -387,9 +490,19 @@ export default function App() {
         const hay = `${s.title || ''} ${s.originalTitle || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
+      if (!quickMatch(s)) return false;
       return true;
     });
-  }, [sessions, filters]);
+  }, [sessions, filters, doneColumnId]);
+
+  // Count of non-archived sessions worth resuming (badge on the "worth" chip).
+  const worthCount = useMemo(() => {
+    const now = Date.now();
+    return sessions.reduce(
+      (n, s) => n + (!s.archived && isWorthResuming(s, { doneColumnId, nowMs: now }) ? 1 : 0),
+      0,
+    );
+  }, [sessions, doneColumnId]);
 
   // Resolve the open detail card from live state by id so the modal reflects
   // updates (renames, archive toggles, context changes) while it is open.
@@ -397,6 +510,15 @@ export default function App() {
     () => (detailId == null ? null : sessions.find((s) => s.id === detailId) || null),
     [detailId, sessions],
   );
+
+  // If the open session disappears (deleted, or its file unlinked) while the
+  // modal is open, the modal unmounts but detailId would otherwise stay set,
+  // leaving a stale ?session=<id> in the URL. Clear it so the deep-link param
+  // matches reality. Guard with !loading so the initial deep-link id isn't
+  // clobbered before sessions have arrived.
+  useEffect(() => {
+    if (detailId && !detailSession && !loading) setDetailId(null);
+  }, [detailId, detailSession, loading]);
 
   const columnCounts = useMemo(() => {
     const counts = {};
@@ -420,6 +542,7 @@ export default function App() {
         onOpenColumnEditor={() => setEditorOpen(true)}
         visibleCount={visibleSessions.length}
         totalCount={sessions.length}
+        worthCount={worthCount}
       />
 
       {error ? (
@@ -446,6 +569,7 @@ export default function App() {
           sessions={visibleSessions}
           allSessions={sessions}
           columns={columns}
+          sortKey={filters.sort}
           onMove={handleMove}
           onOpen={(s) => setDetailId(s.id)}
           onArchive={handleArchive}
