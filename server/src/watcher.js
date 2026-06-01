@@ -118,6 +118,16 @@ export function startWatcher(callbacks = {}) {
     },
   });
 
+  // Always handle 'error': chokidar's FSWatcher is an EventEmitter, and an
+  // emitted 'error' with no listener throws (crashing the process). A watch
+  // error (EMFILE on large trees, a permission change, the projects dir being
+  // replaced) is logged here so it never becomes an unhandled emitter error and
+  // the rest of the app keeps running.
+  watcher.on('error', (err) => {
+    // eslint-disable-next-line no-console
+    console.error('[watcher]', err);
+  });
+
   if (typeof onAdd === 'function') {
     watcher.on('add', (filePath) => onAdd(path.resolve(filePath)));
   }
@@ -183,11 +193,16 @@ export function startSessionWatcher(onEvent) {
     onUnlink: (filePath) => {
       if (!isSessionFile(filePath)) return;
       const id = sessionIdFromPath(filePath);
+      // The DELETE /api/sessions/:id route also unlinks the file, so this event
+      // fires for a delete the route already handled (it emitted session.removed
+      // + store.changed and dropped the overlay entry). Detect that case via
+      // removeOverlay's "changed" return so we don't double-broadcast or, worse,
+      // wipe a freshly re-added overlay entry for the same id. Only an out-of-
+      // band removal (Kambai not the one deleting) still has an overlay entry.
+      const removed = store.removeOverlay(id);
+      if (!removed) return; // already reconciled by the DELETE route — no-op.
       emit({ type: 'session.removed', id });
-      // Mirror the DELETE route: an out-of-band file removal should also drop
-      // the session's overlay entry so it doesn't leak in store.json, then
-      // broadcast the authoritative store so clients converge.
-      store.removeOverlay(id);
+      // Broadcast the authoritative store so clients converge on the removal.
       emit({ type: 'store.changed', store: store.getBoard() });
     },
   });

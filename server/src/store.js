@@ -276,7 +276,7 @@ function doneColumnId(store) {
  *
  * When the target is the "done" column (highest `order`) and a current
  * `lastActivity` is supplied, stamps `entry.lastDoneActivity = lastActivity`.
- * Later activity (lastActivity > lastDoneActivity) then lights the "riattivata"
+ * Later activity (lastActivity > lastDoneActivity) then lights the "reactivated"
  * badge. Moving out of done leaves the marker intact.
  *
  * @param {string} sessionId
@@ -292,11 +292,22 @@ export function moveCard(sessionId, columnId, order, lastActivity = null) {
     throw new Error(`unknown column: ${columnId}`);
   }
 
+  // Clamp the requested index into [0, n] where n is the number of OTHER cards
+  // already in the destination column, and coerce any non-integer to 0. Without
+  // this an out-of-range / negative / fractional / NaN order (reachable via the
+  // raw API) would survive verbatim and break the gap-free 0..n-1 invariant
+  // below (the reservation check `slot === order` would never match). The HTTP
+  // route also rejects such values, but the store is a public module.
+  const others = Object.entries(store.overlay)
+    .filter(([id, e]) => e.columnId === columnId && id !== sessionId)
+    .sort((a, b) => a[1].order - b[1].order);
+  const index = Number.isInteger(order) ? Math.max(0, Math.min(order, others.length)) : 0;
+
   const existing = store.overlay[sessionId];
   const entry =
-    existing ?? { columnId, order, archived: false, lastDoneActivity: null, customTitle: null };
+    existing ?? { columnId, order: index, archived: false, lastDoneActivity: null, customTitle: null };
   entry.columnId = columnId;
-  entry.order = order;
+  entry.order = index;
   store.overlay[sessionId] = entry;
 
   // Stamp the "done" marker when the card enters the done column. Leave it
@@ -306,15 +317,12 @@ export function moveCard(sessionId, columnId, order, lastActivity = null) {
   }
 
   // Keep the destination column free of duplicate orders. The moved card keeps
-  // its requested index; every other sibling is renumbered around it into the
+  // its clamped index; every other sibling is renumbered around it into the
   // remaining slots (in their current order), so the column stays a unique,
   // gap-free 0..n-1 sequence around the insertion point.
-  const others = Object.entries(store.overlay)
-    .filter(([id, e]) => e.columnId === columnId && id !== sessionId)
-    .sort((a, b) => a[1].order - b[1].order);
   let slot = 0;
   for (const [, e] of others) {
-    if (slot === order) slot += 1; // reserve the moved card's requested index
+    if (slot === index) slot += 1; // reserve the moved card's index
     e.order = slot;
     slot += 1;
   }
@@ -390,16 +398,20 @@ export function setTitle(sessionId, title) {
 
 /**
  * Remove a session's overlay entry entirely (e.g. after permanent delete).
+ * Returns whether an entry was actually present and removed, so callers can
+ * avoid redundant broadcasts/writes when the entry was already gone (e.g. the
+ * watcher's unlink event firing for a delete the DELETE route already handled).
  * @param {string} sessionId
- * @returns {Store}
+ * @returns {boolean} True if an entry existed and was removed.
  */
 export function removeOverlay(sessionId) {
   const store = loadStore();
   if (sessionId in store.overlay) {
     delete store.overlay[sessionId];
     writeStore(store);
+    return true;
   }
-  return store;
+  return false;
 }
 
 /**
@@ -455,6 +467,32 @@ export function batchEnsurePlaced(sessionIds) {
 }
 
 /**
+ * Prune overlay entries whose session id is not in `validIds` — i.e. sessions
+ * whose .jsonl file no longer exists on disk. Overlay rows are otherwise only
+ * removed by removeOverlay (DELETE route / watcher unlink), both of which require
+ * Kambai to be running at the moment the file is deleted. Claude Code rotates
+ * its own files and users delete projects while Kambai is down, so those
+ * deletions leave permanent orphans that grow store.json unbounded and inflate
+ * every getBoard() deep-clone. This reconciliation, driven from a full scan,
+ * sweeps them. A single (at most) atomic write covers any number of orphans.
+ * @param {Iterable<string>} validIds - The set of session ids present on disk.
+ * @returns {boolean} True if any orphan was removed (and the store re-written).
+ */
+export function pruneOverlay(validIds) {
+  const store = loadStore();
+  const valid = validIds instanceof Set ? validIds : new Set(validIds);
+  let changed = false;
+  for (const sessionId of Object.keys(store.overlay)) {
+    if (!valid.has(sessionId)) {
+      delete store.overlay[sessionId];
+      changed = true;
+    }
+  }
+  if (changed) writeStore(store);
+  return changed;
+}
+
+/**
  * Add a new column at the end of the board. The id is a stable slug of the name
  * plus the persisted incrementing counter.
  * @param {string} name
@@ -468,7 +506,7 @@ export function addColumn(name) {
   const order = store.columns.length;
   const column = {
     id: `${slugify(name)}-${counter}`,
-    name: String(name ?? '').trim() || `Colonna ${counter}`,
+    name: String(name ?? '').trim() || `Column ${counter}`,
     color: COLUMN_COLORS[order % COLUMN_COLORS.length],
     order,
   };

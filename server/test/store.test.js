@@ -19,6 +19,7 @@ import {
   setArchived,
   setTitle,
   removeOverlay,
+  pruneOverlay,
   ensurePlaced,
   addColumn,
   renameColumn,
@@ -71,13 +72,15 @@ test('getBoard returns a deep copy that does not mutate the stored state', () =>
   assert.equal('ghost' in fresh.overlay, false);
 });
 
-test('moveCard places a card in a column at an order', () => {
+test('moveCard places a card in a column, clamping the order to a contiguous slot', () => {
   const store = loadStore();
   const colId = store.columns[1].id;
+  // Into an empty column, the only valid contiguous index is 0: a too-high
+  // requested order (3) is clamped so the column stays a gap-free 0..n-1.
   const after = moveCard('sess-1', colId, 3);
   assert.deepEqual(after.overlay['sess-1'], {
     columnId: colId,
-    order: 3,
+    order: 0,
     archived: false,
     lastDoneActivity: null,
     customTitle: null,
@@ -85,7 +88,57 @@ test('moveCard places a card in a column at an order', () => {
   // Re-load from disk to prove it was persisted.
   const reloaded = loadStore();
   assert.equal(reloaded.overlay['sess-1'].columnId, colId);
-  assert.equal(reloaded.overlay['sess-1'].order, 3);
+  assert.equal(reloaded.overlay['sess-1'].order, 0);
+});
+
+test('moveCard into a populated column keeps orders a unique contiguous 0..n-1', () => {
+  const store = loadStore();
+  const col = store.columns[1].id;
+  // Seed three cards in the column.
+  moveCard('a', col, 0);
+  moveCard('b', col, 1);
+  moveCard('c', col, 2);
+  // Insert a 4th into the MIDDLE.
+  const after = moveCard('d', col, 1);
+
+  const orders = ['a', 'b', 'c', 'd']
+    .map((id) => after.overlay[id].order)
+    .sort((x, y) => x - y);
+  assert.deepEqual(orders, [0, 1, 2, 3]); // unique, gap-free
+  // The moved card landed at the requested middle index.
+  assert.equal(after.overlay['d'].order, 1);
+});
+
+test('moveCard clamps an out-of-range / negative / fractional order to stay contiguous', () => {
+  const store = loadStore();
+  const col = store.columns[0].id;
+  moveCard('a', col, 0);
+  moveCard('b', col, 1);
+  moveCard('c', col, 2);
+
+  // Out-of-range high → clamped to the end (others.length === 3).
+  const high = moveCard('x', col, 99);
+  const highOrders = ['a', 'b', 'c', 'x']
+    .map((id) => high.overlay[id].order)
+    .sort((p, q) => p - q);
+  assert.deepEqual(highOrders, [0, 1, 2, 3]);
+  assert.equal(high.overlay['x'].order, 3);
+
+  // Negative → clamped to 0.
+  const neg = moveCard('y', col, -1);
+  assert.equal(neg.overlay['y'].order, 0);
+  const negOrders = ['a', 'b', 'c', 'x', 'y']
+    .map((id) => neg.overlay[id].order)
+    .sort((p, q) => p - q);
+  assert.deepEqual(negOrders, [0, 1, 2, 3, 4]);
+
+  // Fractional (and NaN) → coerced to 0, still contiguous.
+  const frac = moveCard('z', col, 1.5);
+  assert.equal(Number.isInteger(frac.overlay['z'].order), true);
+  const fracOrders = ['a', 'b', 'c', 'x', 'y', 'z']
+    .map((id) => frac.overlay[id].order)
+    .sort((p, q) => p - q);
+  assert.deepEqual(fracOrders, [0, 1, 2, 3, 4, 5]);
 });
 
 test('moveCard preserves archived flag when moving an existing card', () => {
@@ -174,12 +227,36 @@ test('setTitle persists the custom title across a reload', () => {
   assert.equal(reloaded.overlay['s'].customTitle, 'Persisted title');
 });
 
-test('removeOverlay drops the overlay entry', () => {
+test('removeOverlay drops the overlay entry and reports whether it changed', () => {
   const store = loadStore();
   moveCard('s', store.columns[0].id, 0);
   assert.ok('s' in loadStore().overlay);
-  removeOverlay('s');
+  // Returns true when an entry was actually removed.
+  assert.equal(removeOverlay('s'), true);
   assert.equal('s' in loadStore().overlay, false);
+  // Returns false (no-op) when the entry was already absent — lets the watcher
+  // skip a redundant re-broadcast after the DELETE route already reconciled.
+  assert.equal(removeOverlay('s'), false);
+});
+
+test('pruneOverlay removes overlay rows for ids absent from the valid set', () => {
+  const store = loadStore();
+  const col = store.columns[0].id;
+  moveCard('keep-1', col, 0);
+  moveCard('orphan-1', col, 1);
+  moveCard('orphan-2', col, 2);
+
+  // Only "keep-1" still exists on disk; the other two are orphans.
+  const changed = pruneOverlay(new Set(['keep-1']));
+  assert.equal(changed, true);
+
+  const after = loadStore();
+  assert.equal('keep-1' in after.overlay, true);
+  assert.equal('orphan-1' in after.overlay, false);
+  assert.equal('orphan-2' in after.overlay, false);
+
+  // Re-running with nothing to prune is a no-op (no write needed).
+  assert.equal(pruneOverlay(new Set(['keep-1'])), false);
 });
 
 test('ensurePlaced puts new sessions in the first column and is idempotent', () => {
@@ -191,12 +268,13 @@ test('ensurePlaced puts new sessions in the first column and is idempotent', () 
   assert.equal(placed.overlay['new-sess'].order, 0);
   assert.equal(placed.overlay['new-sess'].archived, false);
 
-  // Move it elsewhere, then ensurePlaced must NOT move it back.
+  // Move it elsewhere, then ensurePlaced must NOT move it back. The order is
+  // clamped to a contiguous slot (0 in an otherwise-empty target column).
   const lastColId = store.columns[2].id;
   moveCard('new-sess', lastColId, 5);
   const again = ensurePlaced('new-sess');
   assert.equal(again.overlay['new-sess'].columnId, lastColId);
-  assert.equal(again.overlay['new-sess'].order, 5);
+  assert.equal(again.overlay['new-sess'].order, 0);
 });
 
 test('addColumn appends a column with a stable slug+counter id', () => {

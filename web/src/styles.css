@@ -220,6 +220,12 @@ body {
   border-bottom: 1px solid rgba(239, 68, 68, 0.3);
 }
 
+.banner-warn {
+  background: rgba(217, 119, 6, 0.12);
+  color: #fcd34d;
+  border-bottom: 1px solid rgba(217, 119, 6, 0.3);
+}
+
 .state-msg {
   padding: 40px;
   text-align: center;
@@ -326,6 +332,10 @@ body {
   box-shadow: var(--shadow);
   border-color: var(--accent);
   cursor: grabbing;
+  /* The DragOverlay clone renders outside the column flow, so it cannot inherit
+     the in-column card width and must hardcode it. 280px = the 300px column
+     (.column flex-basis) minus the .column-body horizontal padding (2 × 10px).
+     Keep this in sync if either of those changes. */
   width: 280px;
 }
 
@@ -541,7 +551,10 @@ body {
     padding 0.18s ease;
 }
 
-.card:hover .card-prompt {
+/* Reveal on hover OR keyboard focus (focus-within) so the prompt preview is
+   reachable by keyboard/touch users, not just mouse hover. */
+.card:hover .card-prompt,
+.card:focus-within .card-prompt {
   max-height: 80px;
   opacity: 1;
   display: -webkit-box;

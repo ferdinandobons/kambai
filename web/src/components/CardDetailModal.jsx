@@ -5,10 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { timeAgo } from '../util.js';
-
-/** Selector for tabbable elements used by the focus trap. */
-const FOCUSABLE =
-  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+import { trapTab } from '../focusTrap.js';
 
 /** Display a value, falling back to an em dash for empty/missing values. */
 function display(value) {
@@ -71,21 +68,7 @@ export default function CardDetailModal({ session, onClose, onRename, onArchive,
         return;
       }
       // Focus trap: keep Tab cycling within the dialog.
-      if (e.key === 'Tab' && dialogRef.current) {
-        const focusable = Array.from(
-          dialogRef.current.querySelectorAll(FOCUSABLE),
-        ).filter((el) => !el.disabled && el.offsetParent !== null);
-        if (focusable.length === 0) return;
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
+      trapTab(e, dialogRef.current);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

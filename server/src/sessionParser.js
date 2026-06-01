@@ -14,7 +14,7 @@ import { decodeProjectDir, getContextWindow } from './config.js';
  * @property {string} projectDir    - Encoded project directory name.
  * @property {string} projectPath   - Best-effort decoded project path.
  * @property {string} projectName   - Human-friendly project name (last path segment).
- * @property {string} title         - aiTitle || snippet of first user prompt || "(senza titolo)".
+ * @property {string} title         - aiTitle || snippet of first user prompt || "(untitled)".
  * @property {string|null} lastPrompt
  * @property {string|null} gitBranch
  * @property {string|null} model
@@ -53,6 +53,27 @@ function extractText(content) {
     return joined.length > 0 ? joined : null;
   }
   return null;
+}
+
+/**
+ * True for a "user" line that is a tool-result envelope rather than a real human
+ * turn. In real Claude Code sessions the large majority of `user` lines carry
+ * `message.content` = [{ type: 'tool_result', ... }] — the round-trip output of a
+ * tool the assistant invoked, not a typed prompt. Counting these inflates
+ * messageCount well beyond the human-visible conversation length it implies.
+ *
+ * Judged purely structurally: content must be a non-empty array whose every
+ * block is `type: 'tool_result'`. A string or text-bearing content is a real
+ * message and returns false.
+ *
+ * @param {unknown} content
+ * @returns {boolean}
+ */
+function isToolResultOnly(content) {
+  if (!Array.isArray(content) || content.length === 0) return false;
+  return content.every(
+    (block) => block && typeof block === 'object' && block.type === 'tool_result',
+  );
 }
 
 /**
@@ -117,9 +138,6 @@ export async function parseSessionFile(filePath) {
   const id = path.basename(filePath, '.jsonl');
   // projectDir = the encoded directory name that contains the file.
   const projectDir = path.basename(path.dirname(filePath));
-  const projectPath = decodeProjectDir(projectDir);
-  const segments = projectPath.split('/').filter(Boolean);
-  const projectName = segments.length > 0 ? segments[segments.length - 1] : projectDir;
 
   let raw = '';
   try {
@@ -133,6 +151,10 @@ export async function parseSessionFile(filePath) {
   let lastPrompt = null;
   let gitBranch = null;
   let model = null;
+  // The authoritative cwd, present verbatim on user/assistant lines as
+  // `entry.cwd`. decodeProjectDir mangles paths with real dashes or dotfiles
+  // (worktrees, hyphenated names), so prefer the recorded cwd when available.
+  let cwd = null;
   /** @type {number|null} */
   let contextTokens = null;
   let messageCount = 0;
@@ -172,6 +194,12 @@ export async function parseSessionFile(filePath) {
       gitBranch = entry.gitBranch;
     }
 
+    // cwd may appear on many line types and can vary per line (e.g. a sub-line
+    // in a nested dir). Keep the FIRST non-empty one — the session root.
+    if (cwd === null && typeof entry.cwd === 'string' && entry.cwd.length > 0) {
+      cwd = entry.cwd;
+    }
+
     if (type === 'ai-title') {
       if (typeof entry.aiTitle === 'string' && entry.aiTitle.trim().length > 0) {
         aiTitle = entry.aiTitle.trim();
@@ -187,9 +215,17 @@ export async function parseSessionFile(filePath) {
     }
 
     if (type === 'user') {
+      const content = entry.message && entry.message.content;
+      // Skip tool-result envelopes: the vast majority of `user` lines in a real
+      // session are [{type:'tool_result', ...}] round-trips, not human turns.
+      // Counting them inflates messageCount far beyond the conversation length
+      // the field implies, and they never carry a usable fallback title.
+      if (isToolResultOnly(content)) {
+        continue;
+      }
       messageCount += 1;
       if (firstUserText === null) {
-        const userText = extractText(entry.message && entry.message.content);
+        const userText = extractText(content);
         // Use the first REAL user prompt for the fallback title, skipping
         // command/caveat envelopes (a slash-command session otherwise titles
         // itself with boilerplate).
@@ -204,6 +240,14 @@ export async function parseSessionFile(filePath) {
       messageCount += 1;
       const message = entry.message;
       if (message && typeof message === 'object') {
+        // Claude Code emits `<synthetic>` assistant lines for interrupted /
+        // aborted turns and API-error placeholders. They carry a usage object
+        // with all-zero token fields and a "<synthetic>" model id. Ignore them
+        // entirely so a trailing synthetic turn does not zero out contextTokens
+        // (the headline context metric) or clobber the real model/context window.
+        if (message.model === '<synthetic>') {
+          continue;
+        }
         if (typeof message.model === 'string' && message.model.length > 0) {
           model = message.model;
         }
@@ -213,12 +257,20 @@ export async function parseSessionFile(filePath) {
           const cacheRead = Number(usage.cache_read_input_tokens) || 0;
           const cacheCreation = Number(usage.cache_creation_input_tokens) || 0;
           // Use the LAST assistant usage seen; overwrite on each occurrence.
+          // (Synthetic, usage-less turns are already skipped above.)
           contextTokens = input + cacheRead + cacheCreation;
         }
       }
       continue;
     }
   }
+
+  // Prefer the authoritative cwd recorded on the session lines for the displayed
+  // path/name; fall back to the lossy decodeProjectDir only when no line carried
+  // a cwd. This makes worktree and hyphenated-name projects display correctly.
+  const projectPath = cwd ?? decodeProjectDir(projectDir);
+  const segments = projectPath.split('/').filter(Boolean);
+  const projectName = segments.length > 0 ? segments[segments.length - 1] : projectDir;
 
   // Context window + percentage. Null when token data is missing.
   let contextWindow = null;
@@ -235,7 +287,7 @@ export async function parseSessionFile(filePath) {
     contextPct = Math.min(100, Math.round((contextTokens / contextWindow) * 100));
   }
 
-  // Title precedence: aiTitle -> snippet of first user prompt -> "(senza titolo)".
+  // Title precedence: aiTitle -> snippet of first user prompt -> "(untitled)".
   let title = NO_TITLE;
   if (aiTitle) {
     title = aiTitle;

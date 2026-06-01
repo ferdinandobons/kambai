@@ -1,6 +1,6 @@
 // Card.jsx — a session card: title, project + branch, context-usage bar,
-// last activity, message count + model, "riattivata" badge, lastPrompt on
-// hover, and an actions menu (Archivia, Elimina).
+// last activity, message count + model, "reactivated" badge, lastPrompt on
+// hover, and an actions menu (Archive, Delete).
 
 import { useEffect, useRef, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
@@ -155,6 +155,11 @@ export function CardView({
                   onClick={(e) => {
                     e.stopPropagation();
                     setMenuOpen(false);
+                    // Restore focus to the menu button before the menu unmounts,
+                    // matching the Escape path, so keyboard focus doesn't fall to
+                    // <body>. (Archive keeps the card in place; for Delete the
+                    // confirm modal takes focus, so this is harmless there.)
+                    menuButtonRef.current?.focus();
                     onArchive?.(session.id, !session.archived);
                   }}
                 >
@@ -167,6 +172,7 @@ export function CardView({
                   onClick={(e) => {
                     e.stopPropagation();
                     setMenuOpen(false);
+                    menuButtonRef.current?.focus();
                     onDelete?.(session);
                   }}
                 >

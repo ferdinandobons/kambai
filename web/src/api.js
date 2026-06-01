@@ -137,6 +137,13 @@ export async function deleteColumn(id, moveCardsTo) {
  * Each server-sent message is a JSON-encoded event object; this parses it and
  * forwards it to onEvent. Malformed frames are ignored.
  *
+ * Connection state is surfaced to the caller as synthetic events so a dead
+ * stream is not silent:
+ *   - { type: 'connection.open' }   when the stream (re)connects
+ *   - { type: 'connection.error', fatal } on error; `fatal` is true when the
+ *     browser will NOT auto-reconnect (readyState === CLOSED, e.g. the server
+ *     returned a non-2xx or the dev proxy is down at load).
+ *
  * @param {(event: object) => void} onEvent - Called with each parsed event.
  * @returns {() => void} Unsubscribe function that closes the EventSource.
  */
@@ -154,9 +161,15 @@ export function subscribe(onEvent) {
     onEvent(parsed);
   };
 
-  // EventSource auto-reconnects on transient errors; nothing to do here beyond
-  // letting it retry. We intentionally do not close on error.
-  es.onerror = () => {};
+  // A successful (re)connection clears any prior disconnect notice.
+  es.onopen = () => onEvent({ type: 'connection.open' });
+
+  // EventSource auto-reconnects ONLY while readyState is CONNECTING/OPEN. When it
+  // reaches CLOSED the browser gives up permanently, so the board would silently
+  // go stale. Forward the state so the app can show a "disconnected" banner.
+  es.onerror = () => {
+    onEvent({ type: 'connection.error', fatal: es.readyState === EventSource.CLOSED });
+  };
 
   return () => es.close();
 }

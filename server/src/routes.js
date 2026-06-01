@@ -176,15 +176,26 @@ export async function registerRoutes(fastify) {
   // ensurePlaced so the board is always complete.
   fastify.get('/api/sessions', async () => {
     const sessions = await scanAllSessions();
+    const validIds = new Set(sessions.map((s) => s.id));
     let board = store.getBoard();
+
+    // Reconcile orphans: overlay rows whose .jsonl no longer exists on disk
+    // (Claude Code rotated the file or a project was deleted while Kambai was not
+    // running, so no unlink event ever fired). The full scan above is the
+    // authoritative id set, so this is the cheapest place to sweep them and keep
+    // store.json from growing unbounded. New/SSE-only sessions are always on disk
+    // by the time their file event fires, so they appear in `validIds` here.
+    const pruned = store.pruneOverlay(validIds);
 
     // Place any session with no overlay entry yet (always the first column) in a
     // single batched write, regardless of how many are new.
     const unplaced = sessions.filter((s) => !board.overlay[s.id]).map((s) => s.id);
-    if (unplaced.length > 0) {
-      store.batchEnsurePlaced(unplaced);
+    if (unplaced.length > 0 || pruned) {
+      if (unplaced.length > 0) store.batchEnsurePlaced(unplaced);
       board = store.getBoard();
-      broadcastStore();
+      // Reuse the board we just loaded instead of forcing broadcastStore to do a
+      // second redundant disk read + parse + deep clone.
+      broadcastStore(board);
     }
 
     return { sessions: mergeSessions(sessions, board), columns: board.columns };
@@ -198,8 +209,13 @@ export async function registerRoutes(fastify) {
     const { id } = request.params;
     const { columnId, order } = request.body ?? {};
 
-    if (typeof columnId !== 'string' || typeof order !== 'number') {
-      return reply.code(400).send({ error: 'columnId (string) and order (number) are required' });
+    if (!UUID_V4.test(id)) {
+      return reply.code(400).send({ error: 'invalid session id' });
+    }
+    if (typeof columnId !== 'string' || !Number.isInteger(order) || order < 0) {
+      return reply
+        .code(400)
+        .send({ error: 'columnId (string) and order (non-negative integer) are required' });
     }
 
     const board = store.getBoard();
@@ -207,11 +223,23 @@ export async function registerRoutes(fastify) {
       return reply.code(404).send({ error: 'column not found' });
     }
 
-    // When moving into the "done" column, moveCard stamps lastDoneActivity with
-    // the session's current lastActivity so the "riattivata" badge can later
-    // trigger. Parse just this one session (null if unknown) — no full re-scan.
-    const meta = await findSessionMeta(id);
-    const lastActivity = meta ? meta.lastActivity : null;
+    // lastActivity is only consumed when entering the "done" column (the one with
+    // the highest order — mirrors store.doneColumnId). Resolving it costs a full
+    // directory walk + single-file parse, so skip it for every other drop and
+    // only pay that cost when stamping the done marker.
+    let doneCol = null;
+    let maxOrder = -Infinity;
+    for (const c of board.columns) {
+      if (c.order > maxOrder) {
+        maxOrder = c.order;
+        doneCol = c.id;
+      }
+    }
+    let lastActivity = null;
+    if (columnId === doneCol) {
+      const meta = await findSessionMeta(id);
+      lastActivity = meta ? meta.lastActivity : null;
+    }
 
     const updated = store.moveCard(id, columnId, order, lastActivity);
     broadcastStore(updated);
@@ -223,6 +251,9 @@ export async function registerRoutes(fastify) {
     const { id } = request.params;
     const { archived } = request.body ?? {};
 
+    if (!UUID_V4.test(id)) {
+      return reply.code(400).send({ error: 'invalid session id' });
+    }
     if (typeof archived !== 'boolean') {
       return reply.code(400).send({ error: 'archived (boolean) is required' });
     }
@@ -240,6 +271,9 @@ export async function registerRoutes(fastify) {
     const { id } = request.params;
     const { title } = request.body ?? {};
 
+    if (!UUID_V4.test(id)) {
+      return reply.code(400).send({ error: 'invalid session id' });
+    }
     if (typeof title !== 'string') {
       return reply.code(400).send({ error: 'title (string) is required' });
     }
@@ -273,10 +307,12 @@ export async function registerRoutes(fastify) {
       throw err;
     }
 
-    // Drop the overlay entry and notify clients (overlay change + removal).
-    const updated = store.removeOverlay(id);
+    // Drop the overlay entry and notify clients (overlay change + removal). The
+    // chokidar unlink event for this same file will no-op (removeOverlay already
+    // cleared the entry), so clients are not double-notified.
+    store.removeOverlay(id);
     broadcast({ type: 'session.removed', id });
-    broadcastStore(updated);
+    broadcastStore();
     return { deleted: id };
   });
 

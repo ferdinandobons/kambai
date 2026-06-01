@@ -233,13 +233,61 @@ test('routes: POST /api/cards/:id/move validates body before mutating', async ()
   const app = Fastify();
   await app.register(registerRoutes);
 
+  const validId = '11111111-2222-4333-8444-555555555555';
+
   // Missing columnId/order → 400 (never reaches the store stub).
   const res = await app.inject({
     method: 'POST',
-    url: '/api/cards/anything/move',
+    url: `/api/cards/${validId}/move`,
     payload: {},
   });
   assert.equal(res.statusCode, 400);
+
+  // A negative / non-integer order is rejected (defends the order invariant).
+  const negative = await app.inject({
+    method: 'POST',
+    url: `/api/cards/${validId}/move`,
+    payload: { columnId: 'da-fare-1', order: -1 },
+  });
+  assert.equal(negative.statusCode, 400);
+
+  const fractional = await app.inject({
+    method: 'POST',
+    url: `/api/cards/${validId}/move`,
+    payload: { columnId: 'da-fare-1', order: 1.5 },
+  });
+  assert.equal(fractional.statusCode, 400);
+
+  await app.close();
+});
+
+test('routes: card mutations reject a non-UUID id with 400 (no orphan overlay rows)', async () => {
+  const Fastify = (await import('fastify')).default;
+  const { registerRoutes } = await import('../src/routes.js');
+
+  const app = Fastify();
+  await app.register(registerRoutes);
+
+  const move = await app.inject({
+    method: 'POST',
+    url: '/api/cards/not-a-uuid/move',
+    payload: { columnId: 'da-fare-1', order: 0 },
+  });
+  assert.equal(move.statusCode, 400);
+
+  const archive = await app.inject({
+    method: 'POST',
+    url: '/api/cards/not-a-uuid/archive',
+    payload: { archived: true },
+  });
+  assert.equal(archive.statusCode, 400);
+
+  const title = await app.inject({
+    method: 'PATCH',
+    url: '/api/cards/not-a-uuid/title',
+    payload: { title: 'x' },
+  });
+  assert.equal(title.statusCode, 400);
 
   await app.close();
 });

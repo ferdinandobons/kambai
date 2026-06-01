@@ -222,3 +222,109 @@ test('parseSessionFile: fallback title skips a JSON-payload first message', asyn
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
 });
+
+// --- a trailing <synthetic> assistant turn must NOT zero contextTokens --------
+
+test('parseSessionFile: a final <synthetic> assistant turn does not zero out context', async () => {
+  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kambai-'));
+  const file = path.join(tmpDir, 'c3d4e5f6-a7b8-4c9d-8e0f-1a2b3c4d5e6f.jsonl');
+  const lines = [
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        model: 'claude-opus-4-8',
+        usage: { input_tokens: 5000, cache_read_input_tokens: 180000, cache_creation_input_tokens: 12000 },
+      },
+    }),
+    // Interrupted/aborted turn: a synthetic assistant line carrying an all-zero
+    // usage object. This is the LAST assistant line; it must be ignored.
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        model: '<synthetic>',
+        usage: { input_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+      },
+    }),
+  ];
+  await fs.writeFile(file, lines.join('\n') + '\n', 'utf8');
+  try {
+    const meta = await parseSessionFile(file);
+    // contextTokens reflects the LAST real assistant usage, not the synthetic 0.
+    // 5000 + 180000 + 12000 = 197000.
+    assert.equal(meta.contextTokens, 197000);
+    // model is the real model, not "<synthetic>".
+    assert.equal(meta.model, 'claude-opus-4-8');
+    assert.ok(meta.contextPct > 0);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// --- tool_result-only user lines must NOT inflate messageCount ----------------
+
+test('parseSessionFile: tool_result-only user lines are not counted as messages', async () => {
+  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kambai-'));
+  const file = path.join(tmpDir, 'd4e5f6a7-b8c9-4d0e-9f1a-2b3c4d5e6f70.jsonl');
+  const lines = [
+    JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content: 'Run the build and fix any errors.' },
+    }),
+    JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', model: 'claude-opus-4-8', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: {} }] },
+    }),
+    // Tool-result envelope: NOT a human turn, must not count.
+    JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
+    }),
+    JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content: 'Great, now run the tests.' },
+    }),
+  ];
+  await fs.writeFile(file, lines.join('\n') + '\n', 'utf8');
+  try {
+    const meta = await parseSessionFile(file);
+    // 2 real user turns + 1 assistant; the tool_result-only user line is skipped.
+    assert.equal(meta.messageCount, 3);
+    // The fallback title is the first real prompt, not the tool result.
+    assert.equal(meta.title, 'Run the build and fix any errors.');
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// --- the authoritative entry.cwd is preferred over the lossy decodeProjectDir --
+
+test('parseSessionFile: prefers the recorded cwd over the dash-mangled dir name', async () => {
+  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kambai-'));
+  // Encoded dir name mangles the worktree dotfile + hyphenated leaf when decoded.
+  const projDir = path.join(tmpDir, '-Users-x-Desktop-Proj--claude-worktrees-nervous-herschel-1aada5');
+  await fs.mkdir(projDir, { recursive: true });
+  const file = path.join(projDir, 'e5f6a7b8-c9d0-4e1f-8a2b-3c4d5e6f7081.jsonl');
+  const realCwd = '/Users/x/Desktop/Proj/.claude/worktrees/nervous-herschel-1aada5';
+  const lines = [
+    JSON.stringify({ type: 'user', cwd: realCwd, message: { role: 'user', content: 'Start work.' } }),
+  ];
+  await fs.writeFile(file, lines.join('\n') + '\n', 'utf8');
+  try {
+    const meta = await parseSessionFile(file);
+    assert.equal(meta.projectPath, realCwd);
+    assert.equal(meta.projectName, 'nervous-herschel-1aada5');
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('parseSessionFile: falls back to decodeProjectDir when no line carries a cwd', async () => {
+  const meta = await parseSessionFile(
+    fixture('-Users-ferdinandobons-Desktop-DS4-ds4', 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e.jsonl'),
+  );
+  // No cwd on the fixture lines → the decoded dir name is still used.
+  assert.equal(meta.projectPath, '/Users/ferdinandobons/Desktop/DS4/ds4');
+  assert.equal(meta.projectName, 'ds4');
+});

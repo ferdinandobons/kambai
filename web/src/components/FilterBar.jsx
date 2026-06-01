@@ -1,5 +1,5 @@
 // FilterBar.jsx — filters: project, date range (last N days), model, text search
-// on the title, plus a "mostra archiviate" toggle. Controlled by App via the
+// on the title, plus a "Show archived" toggle. Controlled by App via the
 // `filters` object and `onChange`.
 
 /**
@@ -41,6 +41,7 @@ export default function FilterBar({
         type="search"
         className="filter-input filter-search"
         placeholder="Search titles…"
+        aria-label="Search session titles"
         value={filters.search}
         onChange={(e) => onChange({ search: e.target.value })}
       />

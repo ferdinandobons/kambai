@@ -68,18 +68,32 @@ export default function App() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null); // session pending hard-delete
   const [detailId, setDetailId] = useState(null); // session id whose details modal is open
+  const [liveDisconnected, setLiveDisconnected] = useState(false); // SSE stream dead
 
   // Keep the latest store (columns + overlay) so SSE session.* events can be
   // merged correctly without a stale closure.
   const storeRef = useRef({ columns: [], overlay: {} });
 
+  // In-flight optimistic mutations keyed by session id. Each value is a partial
+  // patch (e.g. { columnId, order } or { archived } or { customTitle, title }).
+  // Set before a mutation's await, cleared in its finally. applyStore re-applies
+  // these on top of each merged session so a store.changed snapshot that is still
+  // stale for an in-flight move/archive/rename cannot visibly revert it.
+  const pendingRef = useRef(new Map());
+
   const applyStore = useCallback((store) => {
     if (!store) return;
     storeRef.current = { columns: store.columns || [], overlay: store.overlay || {} };
     setColumns(store.columns || []);
-    // Re-merge overlay onto the sessions we already hold.
+    // Re-merge overlay onto the sessions we already hold, then re-apply any
+    // in-flight optimistic patch so a stale snapshot can't undo a pending op.
+    const pending = pendingRef.current;
     setSessions((prev) =>
-      prev.map((s) => mergeOverlay(s, store)),
+      prev.map((s) => {
+        const merged = mergeOverlay(s, store);
+        const patch = pending.get(s.id);
+        return patch ? { ...merged, ...patch } : merged;
+      }),
     );
   }, []);
 
@@ -175,6 +189,16 @@ export default function App() {
           applyStore(evt.store);
           break;
         }
+        case 'connection.open': {
+          setLiveDisconnected(false);
+          break;
+        }
+        case 'connection.error': {
+          // Only surface a banner for a permanent (CLOSED) disconnect; transient
+          // errors auto-reconnect and clear via connection.open.
+          if (evt.fatal) setLiveDisconnected(true);
+          break;
+        }
         default:
           break;
       }
@@ -198,19 +222,25 @@ export default function App() {
     if (Array.isArray(reordered)) {
       reordered.forEach((s, i) => orderById.set(s.id, i));
     }
+    const movedOrder = orderById.get(id) ?? order;
     setSessions((prev) =>
       prev.map((s) => {
-        if (s.id === id) return { ...s, columnId, order: orderById.get(id) ?? order };
+        if (s.id === id) return { ...s, columnId, order: movedOrder };
         if (orderById.has(s.id) && s.columnId === columnId) {
           return { ...s, order: orderById.get(s.id) };
         }
         return s;
       }),
     );
+    // Mark the moved card in-flight so a concurrent store.changed snapshot (still
+    // showing the old placement) cannot revert it before this POST resolves.
+    pendingRef.current.set(id, { columnId, order: movedOrder });
     try {
       await api.moveCard(id, columnId, order);
     } catch (e) {
       setError(e.message || String(e));
+    } finally {
+      pendingRef.current.delete(id);
     }
   }, []);
 
@@ -218,10 +248,21 @@ export default function App() {
     setSessions((prev) =>
       prev.map((s) => (s.id === id ? { ...s, archived } : s)),
     );
+    // Merge with any existing in-flight patch (e.g. an archive during a move) so
+    // neither optimistic field is dropped by a stale store.changed snapshot.
+    const prevPatch = pendingRef.current.get(id) || {};
+    pendingRef.current.set(id, { ...prevPatch, archived });
     try {
       await api.archiveCard(id, archived);
     } catch (e) {
       setError(e.message || String(e));
+    } finally {
+      const cur = pendingRef.current.get(id);
+      if (cur) {
+        const { archived: _drop, ...rest } = cur;
+        if (Object.keys(rest).length > 0) pendingRef.current.set(id, rest);
+        else pendingRef.current.delete(id);
+      }
     }
   }, []);
 
@@ -229,21 +270,38 @@ export default function App() {
     // Optimistically apply the effective-title rule locally: a blank override
     // resets the card to its parsed original; otherwise the override wins.
     const trimmed = title.trim();
+    let optimisticTitle = null;
     setSessions((prev) =>
       prev.map((s) => {
         if (s.id !== id) return s;
         const base = s.originalTitle ?? s.title;
+        optimisticTitle = trimmed || base;
         return {
           ...s,
-          title: trimmed || base,
+          title: optimisticTitle,
           customTitle: trimmed || null,
         };
       }),
     );
+    // Hold the optimistic title/customTitle in-flight so a stale store.changed
+    // (overlay still pre-PATCH) can't revert the rename before it resolves.
+    const prevPatch = pendingRef.current.get(id) || {};
+    pendingRef.current.set(id, {
+      ...prevPatch,
+      title: optimisticTitle ?? title,
+      customTitle: trimmed || null,
+    });
     try {
       await api.setTitle(id, title);
     } catch (e) {
       setError(e.message || String(e));
+    } finally {
+      const cur = pendingRef.current.get(id);
+      if (cur) {
+        const { title: _t, customTitle: _ct, ...rest } = cur;
+        if (Object.keys(rest).length > 0) pendingRef.current.set(id, rest);
+        else pendingRef.current.delete(id);
+      }
     }
   }, []);
 
@@ -323,7 +381,12 @@ export default function App() {
         const t = new Date(s.lastActivity || 0).getTime();
         if (Number.isNaN(t) || t < sinceMs) return false;
       }
-      if (q && !(s.title || '').toLowerCase().includes(q)) return false;
+      if (q) {
+        // Match the effective title OR the original parsed title, so renaming a
+        // card doesn't make text from its original prompt unsearchable.
+        const hay = `${s.title || ''} ${s.originalTitle || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       return true;
     });
   }, [sessions, filters]);
@@ -365,6 +428,12 @@ export default function App() {
           <button type="button" className="icon-btn" onClick={() => setError(null)}>
             ✕
           </button>
+        </div>
+      ) : null}
+
+      {liveDisconnected ? (
+        <div className="banner banner-warn" role="status">
+          <span>Live updates disconnected — the board may be out of date. Refresh to reconnect.</span>
         </div>
       ) : null}
 
