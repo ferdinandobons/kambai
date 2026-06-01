@@ -1,0 +1,17 @@
+{
+  "name": "kambai",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only Kanban monitor for Claude Code sessions under ~/.claude/projects",
+  "scripts": {
+    "install:all": "npm install && npm --prefix server install && npm --prefix web install",
+    "dev": "concurrently -n server,web -c blue,magenta \"npm --prefix server run dev\" \"npm --prefix web run dev\"",
+    "build": "npm --prefix web run build",
+    "start": "npm --prefix server run start",
+    "test": "npm --prefix server test && npm --prefix web test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

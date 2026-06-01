@@ -5,3 +5,6 @@ data/store.json.bak
 *.log
 .DS_Store
 .env
+
+# Local tooling state (Bonsai observations, etc.)
+.claude/
