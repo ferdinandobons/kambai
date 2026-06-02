@@ -1,8 +1,8 @@
 // store.test.js — node --test, no test-framework deps (Node built-ins only).
 //
-// Every test points KAMBAI_STORE_PATH at a unique temporary file so the real
+// Every test points KANBAI_STORE_PATH at a unique temporary file so the real
 // data/store.json is never touched. store.js resolves its path per-operation,
-// reading process.env.KAMBAI_STORE_PATH if set, else STORE_PATH from config.js.
+// reading process.env.KANBAI_STORE_PATH if set, else STORE_PATH from config.js.
 //
 // Run with: node --test  (from the server/ directory)
 
@@ -32,13 +32,13 @@ let storePath;
 
 beforeEach(() => {
   // A fresh temp dir + path per test → full isolation, never touches data/store.json.
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kambai-store-'));
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kanbai-store-'));
   storePath = path.join(tmpDir, 'store.json');
-  process.env.KAMBAI_STORE_PATH = storePath;
+  process.env.KANBAI_STORE_PATH = storePath;
 });
 
 afterEach(() => {
-  delete process.env.KAMBAI_STORE_PATH;
+  delete process.env.KANBAI_STORE_PATH;
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 

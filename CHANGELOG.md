@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Kambai are documented here. The format is based on
+All notable changes to Kanbai are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
@@ -16,7 +16,7 @@ All notable changes to Kambai are documented here. The format is based on
   reads e.g. "109/285" so the hidden tail stays visible. On a real install this cut
   the board from 285 cards (≈67% untitled noise) to 109 meaningful ones.
 
-[1.1.0]: https://github.com/ferdinandobons/kambai/releases/tag/v1.1.0
+[1.1.0]: https://github.com/ferdinandobons/kanbai/releases/tag/v1.1.0
 
 ## [1.0.0] - 2026-06-02
 
@@ -50,4 +50,4 @@ First release — a read-only, localhost Kanban board for Claude Code sessions.
 - **190 tests** (75 backend `node --test`, 115 web `vitest` including a jsdom +
   Testing Library DOM harness) and **CI** on every push.
 
-[1.0.0]: https://github.com/ferdinandobons/kambai/releases/tag/v1.0.0
+[1.0.0]: https://github.com/ferdinandobons/kanbai/releases/tag/v1.0.0

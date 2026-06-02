@@ -139,7 +139,7 @@ before(async () => {
   try {
     await fs.mkdir(CLAUDE_PROJECTS_DIR, { recursive: true });
     projectsDirCreated = true;
-    tmpProjectDir = await fs.mkdtemp(path.join(CLAUDE_PROJECTS_DIR, 'kambai-test-'));
+    tmpProjectDir = await fs.mkdtemp(path.join(CLAUDE_PROJECTS_DIR, 'kanbai-test-'));
   } catch {
     projectsDirCreated = false;
   }
@@ -308,7 +308,7 @@ test('routes: POST /api/columns rejects empty name with 400', async () => {
 // ---- PATCH /api/cards/:id/title ----------------------------------------
 // Validation guard (non-string -> 400 before any store mutation) and the
 // happy path (valid title -> store.changed broadcast carrying the new
-// customTitle). The happy path points KAMBAI_STORE_PATH at a temp file so the
+// customTitle). The happy path points KANBAI_STORE_PATH at a temp file so the
 // real data/store.json is never touched, and uses a fake SSE client (the same
 // pattern as the SSE hub tests above) to capture the broadcast frame.
 
@@ -342,9 +342,9 @@ test('routes: PATCH /api/cards/:id/title sets the title and broadcasts store.cha
   const { registerRoutes } = await import('../src/routes.js');
 
   // Isolate the store on a temp path so we never touch the real store.json.
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'kambai-wiring-'));
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'kanbai-wiring-'));
   const storePath = path.join(tmpDir, 'store.json');
-  process.env.KAMBAI_STORE_PATH = storePath;
+  process.env.KANBAI_STORE_PATH = storePath;
 
   const app = Fastify();
   await app.register(registerRoutes);
@@ -376,6 +376,6 @@ test('routes: PATCH /api/cards/:id/title sets the title and broadcasts store.cha
 
   closeAll();
   await app.close();
-  delete process.env.KAMBAI_STORE_PATH;
+  delete process.env.KANBAI_STORE_PATH;
   await fs.rm(tmpDir, { recursive: true, force: true });
 });

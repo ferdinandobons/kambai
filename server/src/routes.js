@@ -167,7 +167,7 @@ function mergeSessions(sessions, board) {
 }
 
 /**
- * Register all Kambai routes on the given Fastify instance.
+ * Register all Kanbai routes on the given Fastify instance.
  *
  * @param {import('fastify').FastifyInstance} fastify
  * @returns {Promise<void>}
@@ -196,7 +196,7 @@ export async function registerRoutes(fastify) {
     let board = store.getBoard();
 
     // Reconcile orphans: overlay rows whose .jsonl no longer exists on disk
-    // (Claude Code rotated the file or a project was deleted while Kambai was not
+    // (Claude Code rotated the file or a project was deleted while Kanbai was not
     // running, so no unlink event ever fired). The full scan above is the
     // authoritative id set, so this is the cheapest place to sweep them and keep
     // store.json from growing unbounded. New/SSE-only sessions are always on disk

@@ -70,7 +70,7 @@ test('parseSessionFile: sizeBytes matches the file size on disk', async () => {
 
 test('parseSessionFile: title falls back to first user prompt snippet', async () => {
   const meta = await parseSessionFile(fixture('edge-session.jsonl'));
-  assert.equal(meta.title, 'Scaffold the Kambai project and write the config module first.');
+  assert.equal(meta.title, 'Scaffold the Kanbai project and write the config module first.');
 });
 
 test('parseSessionFile: contextPct with 1M window (model id contains [1m])', async () => {
@@ -157,7 +157,7 @@ test('parseSessionFile: lastActivity falls back to file mtime when no timestamps
 // --- inline temp fixture: fully truncated file is tolerated -------------------
 
 test('parseSessionFile: tolerates a file whose only line is truncated JSON', async () => {
-  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kambai-'));
+  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kanbai-'));
   const file = path.join(tmpDir, 'd4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80.jsonl');
   // A single, never-terminated JSON line (mid-write live session).
   await fs.writeFile(file, '{"type":"assistant","message":{"role":"assistant","mod', 'utf8');
@@ -175,7 +175,7 @@ test('parseSessionFile: tolerates a file whose only line is truncated JSON', asy
 // --- fallback title skips slash-command / caveat envelopes --------------------
 
 test('parseSessionFile: fallback title skips command/caveat envelopes', async () => {
-  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kambai-'));
+  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kanbai-'));
   const file = path.join(tmpDir, 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d.jsonl');
   // First user line is a local-command caveat wrapper; the real prompt follows.
   const lines = [
@@ -201,7 +201,7 @@ test('parseSessionFile: fallback title skips command/caveat envelopes', async ()
 });
 
 test('parseSessionFile: fallback title skips a JSON-payload first message', async () => {
-  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kambai-'));
+  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kanbai-'));
   const file = path.join(tmpDir, 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d61.jsonl');
   // First user line is a programmatic JSON payload; the real prompt follows.
   const lines = [
@@ -227,7 +227,7 @@ test('parseSessionFile: fallback title skips a JSON-payload first message', asyn
 
 /** Write a one-or-more-line .jsonl temp session and parse it. */
 async function parseInline(lines) {
-  const tmpDir = await fs.mkdtemp(path.join(await fs.realpath((await import('node:os')).tmpdir()), 'kambai-'));
+  const tmpDir = await fs.mkdtemp(path.join(await fs.realpath((await import('node:os')).tmpdir()), 'kanbai-'));
   const file = path.join(tmpDir, 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d.jsonl');
   await fs.writeFile(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\n', 'utf8');
   try {
@@ -272,7 +272,7 @@ test('parseSessionFile: automated=false for a slash-command (non-JSON) opener', 
 // --- a trailing <synthetic> assistant turn must NOT zero contextTokens --------
 
 test('parseSessionFile: a final <synthetic> assistant turn does not zero out context', async () => {
-  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kambai-'));
+  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kanbai-'));
   const file = path.join(tmpDir, 'c3d4e5f6-a7b8-4c9d-8e0f-1a2b3c4d5e6f.jsonl');
   const lines = [
     JSON.stringify({
@@ -311,7 +311,7 @@ test('parseSessionFile: a final <synthetic> assistant turn does not zero out con
 // --- tool_result-only user lines must NOT inflate messageCount ----------------
 
 test('parseSessionFile: tool_result-only user lines are not counted as messages', async () => {
-  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kambai-'));
+  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kanbai-'));
   const file = path.join(tmpDir, 'd4e5f6a7-b8c9-4d0e-9f1a-2b3c4d5e6f70.jsonl');
   const lines = [
     JSON.stringify({
@@ -347,7 +347,7 @@ test('parseSessionFile: tool_result-only user lines are not counted as messages'
 // --- the authoritative entry.cwd is preferred over the lossy decodeProjectDir --
 
 test('parseSessionFile: prefers the recorded cwd over the dash-mangled dir name', async () => {
-  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kambai-'));
+  const tmpDir = await fs.mkdtemp(path.join((await fs.realpath((await import('node:os')).tmpdir())), 'kanbai-'));
   // Encoded dir name mangles the worktree dotfile + hyphenated leaf when decoded.
   const projDir = path.join(tmpDir, '-Users-x-Desktop-Proj--claude-worktrees-nervous-herschel-1aada5');
   await fs.mkdir(projDir, { recursive: true });

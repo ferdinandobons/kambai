@@ -15,7 +15,7 @@ function makeSession(overrides = {}) {
   return {
     id: '11111111-1111-4111-8111-111111111111',
     title: 'My card',
-    projectName: 'kambai',
+    projectName: 'kanbai',
     projectPath: '/Users/me/proj',
     gitBranch: 'main',
     model: 'claude-opus-4-8',

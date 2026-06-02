@@ -29,7 +29,7 @@ function renderBar({ filters = {}, ...props } = {}) {
     <FilterBar
       filters={{ ...DEFAULT_FILTERS, ...filters }}
       onChange={onChange}
-      projects={['kambai', 'other-proj']}
+      projects={['kanbai', 'other-proj']}
       models={['claude-opus-4-8', 'claude-haiku-4']}
       onOpenColumnEditor={onOpenColumnEditor}
       {...props}

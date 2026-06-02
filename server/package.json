@@ -1,9 +1,9 @@
 {
-  "name": "kambai-server",
+  "name": "kanbai-server",
   "version": "1.1.0",
   "private": true,
   "type": "module",
-  "description": "Kambai backend: Fastify REST + SSE over ~/.claude/projects",
+  "description": "Kanbai backend: Fastify REST + SSE over ~/.claude/projects",
   "main": "src/index.js",
   "scripts": {
     "dev": "node --watch src/index.js",

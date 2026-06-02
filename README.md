@@ -1,14 +1,14 @@
-# Kambai
+# Kanbai
 
-[![CI](https://github.com/ferdinandobons/kambai/actions/workflows/ci.yml/badge.svg)](https://github.com/ferdinandobons/kambai/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/ferdinandobons/kambai?label=release)](https://github.com/ferdinandobons/kambai/releases/latest)
+[![CI](https://github.com/ferdinandobons/kanbai/actions/workflows/ci.yml/badge.svg)](https://github.com/ferdinandobons/kanbai/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/ferdinandobons/kanbai?label=release)](https://github.com/ferdinandobons/kanbai/releases/latest)
 
 **A read-only, localhost Kanban board for your [Claude Code](https://claude.com/claude-code) sessions.**
 
-![Kambai board](assets/hero.png)
+![Kanbai board](assets/hero.png)
 
 Every Claude Code session holds the full context of your work — the reasoning, the diffs,
-the decisions. Starting a fresh session means throwing that away. Kambai scans every
+the decisions. Starting a fresh session means throwing that away. Kanbai scans every
 session under `~/.claude/projects/` and lays them out on a Kanban board so you can see, at
 a glance, **which conversations are done and which are still worth resuming**.
 
@@ -16,7 +16,7 @@ Drag a card between columns to track its state. Columns are fully customizable. 
 updates **live** — the backend watches your session files and pushes changes over
 Server-Sent Events.
 
-> **Read-only by design.** Kambai never starts, resumes, or edits your sessions. It only
+> **Read-only by design.** Kanbai never starts, resumes, or edits your sessions. It only
 > reads files under `~/.claude/projects/`. The Kanban state lives in a separate local file
 > (`data/store.json`), never inside your sessions directory. The single write under the
 > sessions directory is the explicit **Delete permanently** action, which removes one
@@ -35,7 +35,7 @@ Server-Sent Events.
   stored as an override in `data/store.json` — your session files are never modified, and a
   *Reset to original* is one click away.
 - **Copy resume command** — one click on a card copies `cd <path> && claude --resume <id>`
-  to your clipboard. Kambai stays read-only — it hands you the command, you run it.
+  to your clipboard. Kanbai stays read-only — it hands you the command, you run it.
 - **Triage: "Worth resuming"** — a built-in ranking (high context + recent + reactivated)
   surfaces the sessions actually worth reopening, with a one-click filter and a count badge.
 - **Sort, quick filters & deep links** — sort by last activity / context % / messages /
@@ -54,7 +54,7 @@ Server-Sent Events.
 
 ## How it works
 
-A Claude Code session is a `~/.claude/projects/<project>/<uuid>.jsonl` file. Kambai parses
+A Claude Code session is a `~/.claude/projects/<project>/<uuid>.jsonl` file. Kanbai parses
 each one into a card (title, model, context %, message count, last activity, git branch),
 merges it with your Kanban placement from `data/store.json`, and serves it to the board.
 A `chokidar` watcher streams additions, changes, and removals to the UI.
@@ -113,9 +113,9 @@ npm start       # backend serves web/dist as static on :4319
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `KAMBAI_PORT` | `4319` | Backend HTTP port. |
-| `KAMBAI_PROJECTS_DIR` | `~/.claude/projects` | Sessions directory to read (point it at an isolated dataset for tests/demos). |
-| `KAMBAI_STORE_PATH` | `data/store.json` | Where the Kanban state is persisted. |
+| `KANBAI_PORT` | `4319` | Backend HTTP port. |
+| `KANBAI_PROJECTS_DIR` | `~/.claude/projects` | Sessions directory to read (point it at an isolated dataset for tests/demos). |
+| `KANBAI_STORE_PATH` | `data/store.json` | Where the Kanban state is persisted. |
 
 ## Test
 
@@ -131,7 +131,7 @@ npm test   # server (node --test) + web (vitest)
 ## Project layout
 
 ```
-kambai/
+kanbai/
   package.json            # root: npm workspaces + dev/build/test scripts
   server/                 # Fastify backend (parser, scanner, store, watcher, sse, routes)
   web/                    # React + Vite + dnd-kit frontend

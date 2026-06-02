@@ -17,13 +17,13 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
  * The scanner/parser read ONLY inside this directory, and DELETE is the only
  * write operation ever allowed under it.
  *
- * Overridable via the KAMBAI_PROJECTS_DIR env var (used by tests and demos to
- * point Kambai at an isolated dataset instead of the real ~/.claude/projects).
+ * Overridable via the KANBAI_PROJECTS_DIR env var (used by tests and demos to
+ * point Kanbai at an isolated dataset instead of the real ~/.claude/projects).
  * @type {string}
  */
 export const CLAUDE_PROJECTS_DIR =
-  process.env.KAMBAI_PROJECTS_DIR && process.env.KAMBAI_PROJECTS_DIR.length > 0
-    ? path.resolve(process.env.KAMBAI_PROJECTS_DIR)
+  process.env.KANBAI_PROJECTS_DIR && process.env.KANBAI_PROJECTS_DIR.length > 0
+    ? path.resolve(process.env.KANBAI_PROJECTS_DIR)
     : path.join(os.homedir(), '.claude', 'projects');
 
 /**
@@ -33,10 +33,10 @@ export const CLAUDE_PROJECTS_DIR =
 export const STORE_PATH = path.join(REPO_ROOT, 'data', 'store.json');
 
 /**
- * Backend HTTP port. Defaults to 4319, overridable via the KAMBAI_PORT env var.
+ * Backend HTTP port. Defaults to 4319, overridable via the KANBAI_PORT env var.
  * @type {number}
  */
-export const PORT = Number.parseInt(process.env.KAMBAI_PORT ?? '', 10) || 4319;
+export const PORT = Number.parseInt(process.env.KANBAI_PORT ?? '', 10) || 4319;
 
 /**
  * Default context window (tokens) used when the model id is unknown.

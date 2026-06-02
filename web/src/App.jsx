@@ -12,7 +12,7 @@ import CardDetailModal from './components/CardDetailModal.jsx';
 import { useInertBackground } from './focusTrap.js';
 import { isReactivated, isWorthResuming } from './util.js';
 
-const SORT_STORAGE_KEY = 'kambai.sort';
+const SORT_STORAGE_KEY = 'kanbai.sort';
 const VALID_SORTS = ['board', 'activity', 'context', 'messages', 'created'];
 
 /** Read the persisted sort key from localStorage, falling back to 'board'. */
@@ -32,7 +32,7 @@ const DEFAULT_FILTERS = {
   search: '',
   showArchived: false,
   showAutomated: false, // hide programmatic/agent sessions (no ai-title + JSON opener) by default
-  sort: readStoredSort(), // hydrated from localStorage 'kambai.sort'
+  sort: readStoredSort(), // hydrated from localStorage 'kanbai.sort'
   quick: '', // active quick-filter chip ('' = none)
 };
 

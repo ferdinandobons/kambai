@@ -14,7 +14,7 @@ function makeSession(overrides = {}) {
     title: 'Effective title',
     originalTitle: 'Parsed original',
     customTitle: null,
-    projectName: 'kambai',
+    projectName: 'kanbai',
     projectPath: '/Users/me/my proj',
     gitBranch: 'main',
     model: 'claude-opus-4-8',

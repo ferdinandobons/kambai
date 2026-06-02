@@ -12,8 +12,8 @@
 //      unlink failure.
 //
 // IMPORTANT: config.js resolves CLAUDE_PROJECTS_DIR and STORE_PATH from the
-// environment at IMPORT time. We therefore set KAMBAI_PROJECTS_DIR and
-// KAMBAI_STORE_PATH BEFORE importing any server module, and import those modules
+// environment at IMPORT time. We therefore set KANBAI_PROJECTS_DIR and
+// KANBAI_STORE_PATH BEFORE importing any server module, and import those modules
 // dynamically below so they bind to our temp paths. `node --test` runs each test
 // file in its own child process, so these env writes never leak into the other
 // suites.
@@ -26,14 +26,14 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 
 // --- Temp dirs + env, set BEFORE importing the server modules ---------------
-const baseTmp = fsSync.mkdtempSync(path.join(os.tmpdir(), 'kambai-pipeline-'));
+const baseTmp = fsSync.mkdtempSync(path.join(os.tmpdir(), 'kanbai-pipeline-'));
 const projectsDir = path.join(baseTmp, 'projects');
 const projectDir = path.join(projectsDir, '-Users-test-demo'); // encoded cwd
 const storePath = path.join(baseTmp, 'store.json');
 fsSync.mkdirSync(projectDir, { recursive: true });
 
-process.env.KAMBAI_PROJECTS_DIR = projectsDir;
-process.env.KAMBAI_STORE_PATH = storePath;
+process.env.KANBAI_PROJECTS_DIR = projectsDir;
+process.env.KANBAI_STORE_PATH = storePath;
 
 // Dynamic imports bind to the env above (config reads it at import time).
 const { startSessionWatcher } = await import('../src/watcher.js');

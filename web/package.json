@@ -1,9 +1,9 @@
 {
-  "name": "kambai-web",
+  "name": "kanbai-web",
   "version": "1.1.0",
   "private": true,
   "type": "module",
-  "description": "Kambai frontend: React + Vite + dnd-kit Kanban board",
+  "description": "Kanbai frontend: React + Vite + dnd-kit Kanban board",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

@@ -11,9 +11,9 @@
 //    derived from time or randomness, so they are reproducible in tests.
 //
 // Store path resolution (override for tests):
-//  - If the env var KAMBAI_STORE_PATH is set, that path is used.
+//  - If the env var KANBAI_STORE_PATH is set, that path is used.
 //  - Otherwise STORE_PATH from config.js is used.
-//  The path is resolved per-operation, so a test can point KAMBAI_STORE_PATH at
+//  The path is resolved per-operation, so a test can point KANBAI_STORE_PATH at
 //  a temporary file and the module will read/write there without touching the
 //  real data/store.json. config.js is treated as final and only imported here.
 
@@ -55,13 +55,13 @@ const STORE_VERSION = 1;
 const COLUMN_COLORS = ['#64748b', '#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed'];
 
 /**
- * Resolve the on-disk store path. Honors KAMBAI_STORE_PATH (used by tests) and
+ * Resolve the on-disk store path. Honors KANBAI_STORE_PATH (used by tests) and
  * falls back to STORE_PATH from config.js. Resolved per-call so tests can
  * override it between operations.
  * @returns {string}
  */
 function resolveStorePath() {
-  const override = process.env.KAMBAI_STORE_PATH;
+  const override = process.env.KANBAI_STORE_PATH;
   return override && override.length > 0 ? override : STORE_PATH;
 }
 
@@ -492,8 +492,8 @@ export function batchEnsurePlaced(sessionIds) {
  * Prune overlay entries whose session id is not in `validIds` — i.e. sessions
  * whose .jsonl file no longer exists on disk. Overlay rows are otherwise only
  * removed by removeOverlay (DELETE route / watcher unlink), both of which require
- * Kambai to be running at the moment the file is deleted. Claude Code rotates
- * its own files and users delete projects while Kambai is down, so those
+ * Kanbai to be running at the moment the file is deleted. Claude Code rotates
+ * its own files and users delete projects while Kanbai is down, so those
  * deletions leave permanent orphans that grow store.json unbounded and inflate
  * every getBoard() deep-clone. This reconciliation, driven from a full scan,
  * sweeps them. A single (at most) atomic write covers any number of orphans.
