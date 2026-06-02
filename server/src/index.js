@@ -32,7 +32,7 @@ const WEB_DIST = path.resolve(__dirname, '..', '..', 'web', 'dist');
  * @param {import('fastify').FastifyServerOptions} [opts]
  * @returns {Promise<import('fastify').FastifyInstance>}
  */
-// Cap on the accepted request body. Every Kanbai mutation body is tiny (a
+// Cap on the accepted request body. Every KanbAI mutation body is tiny (a
 // column id list, a title, a boolean), so a modest 256 KB ceiling rejects
 // absurd payloads early instead of relying on Fastify's larger default.
 const BODY_LIMIT = 256 * 1024;
@@ -90,7 +90,7 @@ export async function start() {
 
   await app.listen({ port: PORT, host: '127.0.0.1' });
   // eslint-disable-next-line no-console
-  console.log(`Kanbai backend listening on http://127.0.0.1:${PORT}`);
+  console.log(`KanbAI backend listening on http://127.0.0.1:${PORT}`);
 
   return app;
 }

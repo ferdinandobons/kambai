@@ -55,7 +55,7 @@ export default function FilterBar({
     <div className="filterbar">
       <div className="brand">
         <span className="brand-logo" aria-hidden="true">KAI</span>
-        <span className="brand-name">Kanbai</span>
+        <span className="brand-name">KanbAI</span>
       </div>
 
       <input

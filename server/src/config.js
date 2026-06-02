@@ -18,7 +18,7 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
  * write operation ever allowed under it.
  *
  * Overridable via the KANBAI_PROJECTS_DIR env var (used by tests and demos to
- * point Kanbai at an isolated dataset instead of the real ~/.claude/projects).
+ * point KanbAI at an isolated dataset instead of the real ~/.claude/projects).
  * @type {string}
  */
 export const CLAUDE_PROJECTS_DIR =

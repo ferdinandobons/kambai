@@ -146,7 +146,7 @@ export function startWatcher(callbacks = {}) {
 }
 
 /**
- * High-level watcher that maps file-system changes to Kanbai domain events and
+ * High-level watcher that maps file-system changes to KanbAI domain events and
  * forwards them to `onEvent`. This is what index.js wires to the SSE hub.
  *
  * Mapping:
@@ -202,7 +202,7 @@ export function startSessionWatcher(onEvent) {
       // + store.changed and dropped the overlay entry). Detect that case via
       // removeOverlay's "changed" return so we don't double-broadcast or, worse,
       // wipe a freshly re-added overlay entry for the same id. Only an out-of-
-      // band removal (Kanbai not the one deleting) still has an overlay entry.
+      // band removal (KanbAI not the one deleting) still has an overlay entry.
       const removed = store.removeOverlay(id);
       if (!removed) return; // already reconciled by the DELETE route — no-op.
       emit({ type: 'session.removed', id });

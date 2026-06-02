@@ -523,8 +523,8 @@ export function batchEnsurePlaced(sessionIds) {
  * Prune overlay entries whose session id is not in `validIds` — i.e. sessions
  * whose .jsonl file no longer exists on disk. Overlay rows are otherwise only
  * removed by removeOverlay (DELETE route / watcher unlink), both of which require
- * Kanbai to be running at the moment the file is deleted. Claude Code rotates
- * its own files and users delete projects while Kanbai is down, so those
+ * KanbAI to be running at the moment the file is deleted. Claude Code rotates
+ * its own files and users delete projects while KanbAI is down, so those
  * deletions leave permanent orphans that grow store.json unbounded and inflate
  * every getBoard() deep-clone. This reconciliation, driven from a full scan,
  * sweeps them. A single (at most) atomic write covers any number of orphans.
