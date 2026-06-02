@@ -1,5 +1,8 @@
 # Kambai
 
+[![CI](https://github.com/ferdinandobons/kambai/actions/workflows/ci.yml/badge.svg)](https://github.com/ferdinandobons/kambai/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/ferdinandobons/kambai?label=release)](https://github.com/ferdinandobons/kambai/releases/latest)
+
 **A read-only, localhost Kanban board for your [Claude Code](https://claude.com/claude-code) sessions.**
 
 ![Kambai board](assets/hero.png)
