@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: test + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # npm workspaces: a single root install pulls in server/ and web/ deps.
+      - name: Install
+        run: npm install
+
+      # Backend: node --test. Frontend: vitest (jsdom). (root "test" runs both.)
+      - name: Test
+        run: npm test
+
+      - name: Build (web)
+        run: npm run build
