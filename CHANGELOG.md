@@ -4,6 +4,20 @@ All notable changes to Kambai are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-06-02
+
+### Added
+
+- **Hide automated sessions** — programmatic/agent sessions (no AI-generated title
+  **and** a JSON-payload first message, the signature of plugin/hook-launched runs
+  such as Bonsai observers) are now flagged `automated` by the parser and **hidden
+  by default**. A one-click **"Show automated"** toggle (next to "Show archived")
+  brings them back. Nothing is deleted or excluded from the data; the session count
+  reads e.g. "109/285" so the hidden tail stays visible. On a real install this cut
+  the board from 285 cards (≈67% untitled noise) to 109 meaningful ones.
+
+[1.1.0]: https://github.com/ferdinandobons/kambai/releases/tag/v1.1.0
+
 ## [1.0.0] - 2026-06-02
 
 First release — a read-only, localhost Kanban board for Claude Code sessions.
