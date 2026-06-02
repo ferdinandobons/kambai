@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { timeAgo, contextColor, isReactivated, resumeCommand } from '../util.js';
-import CopyToast, { useCopyToast } from './CopyToast.jsx';
+import { useToast } from './CopyToast.jsx';
 
 /**
  * Shorten a model id for display, e.g. "claude-opus-4-7" → "opus-4-7".
@@ -50,7 +50,7 @@ export function CardView({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const menuButtonRef = useRef(null);
-  const { copied, copy } = useCopyToast();
+  const { copy } = useToast();
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -191,7 +191,6 @@ export function CardView({
                 </button>
               </div>
             ) : null}
-            <CopyToast show={copied} className="copy-toast-card" />
           </div>
         </div>
 

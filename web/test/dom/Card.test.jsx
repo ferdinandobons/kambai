@@ -9,6 +9,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { CardView } from '../../src/components/Card.jsx';
+import { ToastProvider } from '../../src/components/CopyToast.jsx';
 
 function makeSession(overrides = {}) {
   return {
@@ -110,7 +111,11 @@ describe('Card menu actions', () => {
       writable: true,
     });
     const session = makeSession({ projectPath: '/Users/me/proj' });
-    render(<CardView session={session} onOpen={() => {}} onArchive={() => {}} onDelete={() => {}} />);
+    render(
+      <ToastProvider>
+        <CardView session={session} onOpen={() => {}} onArchive={() => {}} onDelete={() => {}} />
+      </ToastProvider>,
+    );
     await user.click(screen.getByRole('button', { name: 'Actions' }));
     await user.click(screen.getByRole('menuitem', { name: 'Copy resume command' }));
     expect(clipboardWrite).toHaveBeenCalledWith(

@@ -1,30 +1,23 @@
-// CopyToast.test.jsx — the transient "copied" confirmation: the aria-live region
-// is always present (so SR announces changes) but only carries the message text
-// while `show` is true, and the useCopyToast() hook flashes then clears after the
-// 2s timer (driven by fake timers).
+// CopyToast.test.jsx — the single app-level "copied" toast: one persistent
+// aria-live region owned by <ToastProvider>, flashed via useToast().copy(text),
+// which writes to the clipboard and clears the bubble after the 2s timer.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { useEffect } from 'react';
 
-import CopyToast, { useCopyToast } from '../../src/components/CopyToast.jsx';
+import { ToastProvider, useToast } from '../../src/components/CopyToast.jsx';
 
-describe('CopyToast component', () => {
-  it('always renders a polite live region; shows the message only when show=true', () => {
-    const { rerender } = render(<CopyToast show={false} />);
-    const region = screen.getByRole('status');
-    expect(region).toHaveAttribute('aria-live', 'polite');
-    expect(region).toHaveTextContent('');
+// A tiny child that hands its copy() back to the test.
+function Harness({ onReady }) {
+  const { copy } = useToast();
+  useEffect(() => {
+    onReady(copy);
+  }, [copy, onReady]);
+  return null;
+}
 
-    rerender(<CopyToast show />);
-    expect(screen.getByRole('status')).toHaveTextContent('Copied — paste in your terminal');
-
-    rerender(<CopyToast show message="Custom!" />);
-    expect(screen.getByRole('status')).toHaveTextContent('Custom!');
-  });
-});
-
-describe('useCopyToast hook', () => {
+describe('ToastProvider + useToast', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -33,16 +26,18 @@ describe('useCopyToast hook', () => {
     vi.useRealTimers();
   });
 
-  // A tiny harness that exposes the hook's copied flag + a copy() trigger.
-  function Harness({ onReady }) {
-    const { copied, copy } = useCopyToast();
-    useEffect(() => {
-      onReady(copy);
-    }, [copy, onReady]);
-    return <CopyToast show={copied} />;
-  }
+  it('renders one persistent polite live region, empty until a copy', () => {
+    render(
+      <ToastProvider>
+        <div>child</div>
+      </ToastProvider>,
+    );
+    const region = screen.getByRole('status');
+    expect(region).toHaveAttribute('aria-live', 'polite');
+    expect(region).toHaveTextContent('');
+  });
 
-  it('copy() shows the toast, then clears it after ~2s', async () => {
+  it('copy() writes to the clipboard, shows the toast, then clears after ~2s', async () => {
     let copyFn;
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {
@@ -51,23 +46,26 @@ describe('useCopyToast hook', () => {
       writable: true,
     });
 
-    render(<Harness onReady={(fn) => { copyFn = fn; }} />);
+    render(
+      <ToastProvider>
+        <Harness onReady={(fn) => { copyFn = fn; }} />
+      </ToastProvider>,
+    );
     expect(screen.getByRole('status')).toHaveTextContent('');
 
-    // Trigger a copy; flush the awaited clipboard write microtask.
     await act(async () => {
       await copyFn('some text');
     });
     expect(writeText).toHaveBeenCalledWith('some text');
     expect(screen.getByRole('status')).toHaveTextContent('Copied — paste in your terminal');
 
-    // Before the 2s window elapses it is still shown.
+    // Still shown just before the 2s window elapses.
     await act(async () => {
       vi.advanceTimersByTime(1999);
     });
     expect(screen.getByRole('status')).toHaveTextContent('Copied — paste in your terminal');
 
-    // After the window the toast clears itself.
+    // Cleared after the window.
     await act(async () => {
       vi.advanceTimersByTime(1);
     });
@@ -83,11 +81,14 @@ describe('useCopyToast hook', () => {
       writable: true,
     });
 
-    render(<Harness onReady={(fn) => { copyFn = fn; }} />);
+    render(
+      <ToastProvider>
+        <Harness onReady={(fn) => { copyFn = fn; }} />
+      </ToastProvider>,
+    );
     await act(async () => {
       await copyFn('text');
     });
-    // The catch in copy() swallows the rejection and still flashes.
     expect(screen.getByRole('status')).toHaveTextContent('Copied — paste in your terminal');
   });
 });

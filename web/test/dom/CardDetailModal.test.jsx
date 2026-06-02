@@ -6,6 +6,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import CardDetailModal from '../../src/components/CardDetailModal.jsx';
+import { ToastProvider } from '../../src/components/CopyToast.jsx';
 
 function makeSession(overrides = {}) {
   return {
@@ -102,7 +103,11 @@ describe('CardDetailModal Resume copy', () => {
       writable: true,
     });
     const session = makeSession({ projectPath: '/Users/me/my proj' });
-    render(<CardDetailModal session={session} onRename={() => {}} onClose={() => {}} />);
+    render(
+      <ToastProvider>
+        <CardDetailModal session={session} onRename={() => {}} onClose={() => {}} />
+      </ToastProvider>,
+    );
 
     await user.click(screen.getByRole('button', { name: 'Resume' }));
 
