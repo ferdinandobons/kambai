@@ -31,6 +31,8 @@ import { decodeProjectDir, getContextWindow } from './config.js';
  * @property {string|null} createdAt        - ISO of first timestamp.
  * @property {string} lastActivity          - ISO of last timestamp, fallback file mtime.
  * @property {number} sizeBytes
+ * @property {boolean} automated            - No ai-title AND a JSON-payload first user message
+ *                                            (a programmatic/agent session; hidden by default in the UI).
  */
 
 const NO_TITLE = '(untitled)';
@@ -83,10 +85,31 @@ function isToolResultOnly(content) {
 }
 
 /**
+ * True when `text` is a whole JSON object/array — i.e. a programmatic payload
+ * (an agent/hook-launched session whose first "user" message is a JSON blob like
+ * `{ "project_dir": …, "transcript_path": … }`), not a human prompt.
+ *
+ * @param {string} text
+ * @returns {boolean}
+ */
+function isJsonPayload(text) {
+  const t = text.trimStart();
+  if (t[0] !== '{' && t[0] !== '[') return false;
+  try {
+    JSON.parse(t);
+    return true;
+  } catch {
+    // Not valid JSON (or truncated) → ordinary prose.
+    return false;
+  }
+}
+
+/**
  * True for "user" messages that are command/system envelopes rather than a real
- * prompt: slash-command wrappers, local-command caveats, bash io blocks, and
- * prompt-submit hooks. The fallback title skips these so a session that opened
- * with a slash command does not get titled "<local-command-caveat>Caveat: …".
+ * prompt: slash-command wrappers, local-command caveats, bash io blocks,
+ * prompt-submit hooks, or a whole-JSON payload. The fallback title skips these so
+ * a session that opened with a slash command (or a JSON blob) does not get titled
+ * "<local-command-caveat>Caveat: …" or "{ "project_dir": … }".
  *
  * @param {string} text
  * @returns {boolean}
@@ -102,18 +125,7 @@ function isMetaText(text) {
   ) {
     return true;
   }
-  // A first user message that is a whole JSON object/array is a programmatic
-  // payload (an agent/hook-launched session), not a human prompt — skip it so
-  // the title doesn't become `{ "project_dir": … }`.
-  if (t[0] === '{' || t[0] === '[') {
-    try {
-      JSON.parse(t);
-      return true;
-    } catch {
-      // Not valid JSON (or truncated) → treat as ordinary prose.
-    }
-  }
-  return false;
+  return isJsonPayload(text);
 }
 
 /**
@@ -154,6 +166,9 @@ export async function parseSessionFile(filePath) {
 
   let aiTitle = null;
   let firstUserText = null;
+  // The very first human-typed user message (before the meta/JSON skip), used to
+  // flag programmatic/"automated" sessions (no ai-title + a JSON-payload opener).
+  let firstUserRaw = null;
   let lastPrompt = null;
   let gitBranch = null;
   let model = null;
@@ -233,8 +248,11 @@ export async function parseSessionFile(filePath) {
         continue;
       }
       messageCount += 1;
+      const userText = extractText(content);
+      if (firstUserRaw === null && userText) {
+        firstUserRaw = userText;
+      }
       if (firstUserText === null) {
-        const userText = extractText(content);
         // Use the first REAL user prompt for the fallback title, skipping
         // command/caveat envelopes (a slash-command session otherwise titles
         // itself with boilerplate).
@@ -304,6 +322,12 @@ export async function parseSessionFile(filePath) {
     title = snippet(firstUserText);
   }
 
+  // "Automated" = a programmatic session, not a human conversation: no
+  // AI-generated title AND its first user message is a whole JSON payload (the
+  // signature of agent/hook-launched runs, e.g. Bonsai observers). The UI hides
+  // these by default behind a one-click toggle so they don't flood the board.
+  const automated = !aiTitle && firstUserRaw !== null && isJsonPayload(firstUserRaw);
+
   // lastActivity: last timestamp seen, falling back to the file mtime.
   const lastActivity = lastTimestamp !== null ? lastTimestamp : stat.mtime.toISOString();
 
@@ -323,5 +347,6 @@ export async function parseSessionFile(filePath) {
     createdAt,
     lastActivity,
     sizeBytes,
+    automated,
   };
 }

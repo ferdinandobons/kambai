@@ -223,6 +223,52 @@ test('parseSessionFile: fallback title skips a JSON-payload first message', asyn
   }
 });
 
+// --- automated flag: no ai-title + JSON-payload first message -----------------
+
+/** Write a one-or-more-line .jsonl temp session and parse it. */
+async function parseInline(lines) {
+  const tmpDir = await fs.mkdtemp(path.join(await fs.realpath((await import('node:os')).tmpdir()), 'kambai-'));
+  const file = path.join(tmpDir, 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d.jsonl');
+  await fs.writeFile(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\n', 'utf8');
+  try {
+    return await parseSessionFile(file);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+}
+
+test('parseSessionFile: automated=true when no ai-title and the first user msg is a JSON payload', async () => {
+  const meta = await parseInline([
+    { type: 'user', message: { role: 'user', content: '{ "project_dir": "/x", "transcript_path": "/y/bonsai-inline/z" }' } },
+    { type: 'assistant', message: { role: 'assistant', model: 'claude-sonnet-4-6' } },
+  ]);
+  assert.equal(meta.automated, true);
+  assert.equal(meta.title, '(untitled)');
+});
+
+test('parseSessionFile: automated=false when the session has an ai-title (even with a JSON opener)', async () => {
+  const meta = await parseInline([
+    { type: 'ai-title', aiTitle: 'Run the gardener' },
+    { type: 'user', message: { role: 'user', content: '{ "project_dir": "/x" }' } },
+  ]);
+  assert.equal(meta.automated, false);
+  assert.equal(meta.title, 'Run the gardener');
+});
+
+test('parseSessionFile: automated=false for a normal human prompt with no ai-title', async () => {
+  const meta = await parseInline([
+    { type: 'user', message: { role: 'user', content: 'Refactor the auth module.' } },
+  ]);
+  assert.equal(meta.automated, false);
+});
+
+test('parseSessionFile: automated=false for a slash-command (non-JSON) opener', async () => {
+  const meta = await parseInline([
+    { type: 'user', message: { role: 'user', content: '<command-name>/bonsai:status</command-name>' } },
+  ]);
+  assert.equal(meta.automated, false);
+});
+
 // --- a trailing <synthetic> assistant turn must NOT zero contextTokens --------
 
 test('parseSessionFile: a final <synthetic> assistant turn does not zero out context', async () => {

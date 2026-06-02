@@ -12,7 +12,7 @@
 // columnId, archived) so the test can assert the reconciled state from the DOM.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 
 import { makeSession, makeStore, makeFakeEmitter, deferred } from './helpers.js';
 
@@ -431,5 +431,25 @@ describe('App deep-link', () => {
     expect(
       screen.queryByRole('dialog', { name: /Session details/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe('automated session filter', () => {
+  const NORMAL = '11111111-1111-4111-8111-111111111111';
+  const AUTO = '22222222-2222-4222-8222-222222222222';
+
+  it('hides automated sessions by default and reveals them via the toggle', async () => {
+    const normal = makeSession({ id: NORMAL, title: 'Real work', originalTitle: 'Real work' });
+    const auto = makeSession({ id: AUTO, title: '(untitled)', originalTitle: '(untitled)', automated: true });
+    await renderApp({ sessions: [normal, auto], store: makeStore({}) });
+
+    // Default: the automated session is filtered out of the visible list Board gets.
+    expect(boardProps.current.sessions.map((s) => s.id)).toEqual([NORMAL]);
+
+    // One click on "Show automated" reveals it.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Show automated' }));
+    await waitFor(() =>
+      expect(boardProps.current.sessions.map((s) => s.id).sort()).toEqual([AUTO, NORMAL].sort()),
+    );
   });
 });

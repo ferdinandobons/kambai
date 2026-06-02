@@ -16,6 +16,7 @@ const DEFAULT_FILTERS = {
   days: 0,
   search: '',
   showArchived: false,
+  showAutomated: false,
   sort: 'board',
   quick: '',
 };
@@ -81,6 +82,13 @@ describe('FilterBar controls patch the right field', () => {
     const { onChange } = renderBar();
     await user.click(screen.getByLabelText('Show archived'));
     expect(onChange).toHaveBeenLastCalledWith({ showArchived: true });
+  });
+
+  it('toggling Show automated patches { showAutomated } with the checkbox state', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderBar();
+    await user.click(screen.getByLabelText('Show automated'));
+    expect(onChange).toHaveBeenLastCalledWith({ showAutomated: true });
   });
 
   it('the Columns button invokes onOpenColumnEditor', async () => {

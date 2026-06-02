@@ -47,6 +47,9 @@ Server-Sent Events.
   activity gets flagged, so a "finished" session that came back to life never slips by.
 - **Two distinct cleanups** — *Archive* hides a card while keeping the file intact;
   *Delete permanently* removes the `.jsonl` from disk (guarded + confirmed).
+- **Hides the noise** — programmatic/agent sessions (no AI title + a JSON-payload first
+  message, e.g. plugin observers) are detected and hidden by default; a one-click
+  *Show automated* toggle brings them back.
 - **Live updates** — new sessions appear and existing ones refresh in real time via SSE.
 
 ## How it works

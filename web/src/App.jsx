@@ -31,6 +31,7 @@ const DEFAULT_FILTERS = {
   days: 0, // 0 = always
   search: '',
   showArchived: false,
+  showAutomated: false, // hide programmatic/agent sessions (no ai-title + JSON opener) by default
   sort: readStoredSort(), // hydrated from localStorage 'kambai.sort'
   quick: '', // active quick-filter chip ('' = none)
 };
@@ -604,6 +605,9 @@ export default function App() {
     };
 
     return sessions.filter((s) => {
+      // Programmatic/agent sessions (no ai-title + JSON-payload opener, e.g.
+      // Bonsai observers) are hidden by default; one toggle reveals them.
+      if (!filters.showAutomated && s.automated) return false;
       if (!filters.showArchived && s.archived) return false;
       if (filters.project && s.projectName !== filters.project) return false;
       if (filters.model && s.model !== filters.model) return false;

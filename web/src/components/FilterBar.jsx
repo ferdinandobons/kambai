@@ -19,7 +19,7 @@ const QUICK_CHIPS = [
 
 /**
  * @param {Object} props
- * @param {object} props.filters - { project, days, model, search, showArchived, sort, quick }
+ * @param {object} props.filters - { project, days, model, search, showArchived, showAutomated, sort, quick }
  * @param {(patch: object) => void} props.onChange - merge-patches the filter state.
  * @param {string[]} props.projects - distinct project names present in the data.
  * @param {string[]} props.models - distinct model ids present in the data.
@@ -128,6 +128,18 @@ export default function FilterBar({
           onChange={(e) => onChange({ showArchived: e.target.checked })}
         />
         <span>Show archived</span>
+      </label>
+
+      <label
+        className="filter-toggle"
+        title="Programmatic/agent sessions (no AI title + a JSON-payload first message)"
+      >
+        <input
+          type="checkbox"
+          checked={filters.showAutomated}
+          onChange={(e) => onChange({ showAutomated: e.target.checked })}
+        />
+        <span>Show automated</span>
       </label>
 
       <div className="filterbar-spacer" />
