@@ -8,6 +8,13 @@ import userEvent from '@testing-library/user-event';
 import CardDetailModal from '../../src/components/CardDetailModal.jsx';
 import { ToastProvider } from '../../src/components/CopyToast.jsx';
 
+// The modal lazily fetches the prompt history on open; stub it so the other
+// tests don't hit a real fetch, and so the history test can control the result.
+vi.mock('../../src/api.js', () => ({
+  getPrompts: vi.fn().mockResolvedValue({ prompts: [], total: 0 }),
+}));
+import * as api from '../../src/api.js';
+
 function makeSession(overrides = {}) {
   return {
     id: '11111111-1111-4111-8111-111111111111',
@@ -37,6 +44,26 @@ beforeEach(() => {
     value: { writeText: clipboardWrite },
     configurable: true,
     writable: true,
+  });
+});
+
+describe('CardDetailModal prompt history', () => {
+  it('lazily fetches and renders the human prompt history', async () => {
+    api.getPrompts.mockResolvedValueOnce({
+      prompts: [
+        { text: 'Add cursor pagination', ts: null },
+        { text: 'Now add unit tests', ts: null },
+      ],
+      total: 2,
+    });
+    render(
+      <ToastProvider>
+        <CardDetailModal session={makeSession()} onClose={() => {}} onRename={() => {}} />
+      </ToastProvider>,
+    );
+    expect(api.getPrompts).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+    expect(await screen.findByText('Add cursor pagination')).toBeInTheDocument();
+    expect(screen.getByText('Now add unit tests')).toBeInTheDocument();
   });
 });
 

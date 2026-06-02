@@ -4,6 +4,7 @@
 // lastPrompt, and footer actions (archive/restore, delete, close).
 
 import { useEffect, useRef, useState } from 'react';
+import * as api from '../api.js';
 import { timeAgo, resumeCommand } from '../util.js';
 import { trapTab } from '../focusTrap.js';
 import { useToast } from './CopyToast.jsx';
@@ -40,6 +41,28 @@ export default function CardDetailModal({ session, onClose, onRename, onArchive,
 
   const sessionId = session?.id;
   const effectiveTitle = session?.title ?? '';
+
+  // The session's human prompt history, fetched lazily when a card opens (kept
+  // out of the bulk /api/sessions payload). Pure parsing on the server, no LLM.
+  const [prompts, setPrompts] = useState(null); // { prompts, total } | null
+  const [promptsError, setPromptsError] = useState(false);
+  useEffect(() => {
+    if (sessionId == null) return undefined;
+    let cancelled = false;
+    setPrompts(null);
+    setPromptsError(false);
+    api
+      .getPrompts(sessionId)
+      .then((res) => {
+        if (!cancelled) setPrompts(res);
+      })
+      .catch(() => {
+        if (!cancelled) setPromptsError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
 
   // Keep the latest onClose without re-running the keydown effect (the parent
   // passes an inline arrow, so its identity changes every render). Mirrors
@@ -204,6 +227,35 @@ export default function CardDetailModal({ session, onClose, onRename, onArchive,
             <div className="detail-prompt">{session.lastPrompt}</div>
           </div>
         ) : null}
+
+        {/* Prompt history — the human turns, so you remember what's inside. */}
+        <div className="detail-prompt-block">
+          <div className="detail-prompt-label">
+            Prompt history
+            {prompts ? <span className="muted"> ({prompts.total})</span> : null}
+          </div>
+          {prompts == null && !promptsError ? (
+            <div className="detail-prompt muted">Loading…</div>
+          ) : promptsError ? (
+            <div className="detail-prompt muted">Couldn't load the prompt history.</div>
+          ) : prompts.prompts.length === 0 ? (
+            <div className="detail-prompt muted">No human prompts in this session.</div>
+          ) : (
+            <ol className="detail-prompts">
+              {prompts.prompts.map((p, i) => (
+                <li key={i} className="detail-prompt-item">
+                  <span className="detail-prompt-text">{p.text}</span>
+                  {p.ts ? <span className="muted detail-prompt-time"> · {timeAgo(p.ts)}</span> : null}
+                </li>
+              ))}
+              {prompts.total > prompts.prompts.length ? (
+                <li className="detail-prompt-item muted">
+                  +{prompts.total - prompts.prompts.length} more…
+                </li>
+              ) : null}
+            </ol>
+          )}
+        </div>
 
         {/* Footer actions */}
         <div className="modal-actions detail-actions">

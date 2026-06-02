@@ -350,3 +350,57 @@ export async function parseSessionFile(filePath) {
     automated,
   };
 }
+
+const PROMPT_SNIPPET_MAX = 280;
+const MAX_PROMPTS = 80;
+
+/**
+ * Extract the session's human prompt history — the user's own typed turns, in
+ * order — for the detail view. Skips tool-result envelopes and command/JSON
+ * payloads (so an agent session's JSON blobs don't appear as "prompts"). Each
+ * prompt is whitespace-collapsed and clamped; the list is capped at MAX_PROMPTS
+ * with the true count returned separately. Pure parsing, no LLM, no token cost.
+ *
+ * @param {string} filePath - Absolute path to the .jsonl file (validated upstream).
+ * @returns {Promise<{ prompts: Array<{ text: string, ts: string|null }>, total: number }>}
+ */
+export async function parseSessionPrompts(filePath) {
+  let raw = '';
+  try {
+    raw = await fs.readFile(filePath, 'utf8');
+  } catch {
+    return { prompts: [], total: 0 };
+  }
+
+  const prompts = [];
+  let total = 0;
+  for (const line of raw.split('\n')) {
+    const t = line.trim();
+    if (t.length === 0) continue;
+    let entry;
+    try {
+      entry = JSON.parse(t);
+    } catch {
+      continue;
+    }
+    if (!entry || entry.type !== 'user') continue;
+    const content = entry.message && entry.message.content;
+    if (isToolResultOnly(content)) continue;
+    const text = extractText(content);
+    if (!text || isMetaText(text)) continue; // human prose only
+
+    total += 1;
+    if (prompts.length < MAX_PROMPTS) {
+      const collapsed = text.replace(/\s+/g, ' ').trim();
+      const clamped =
+        collapsed.length > PROMPT_SNIPPET_MAX
+          ? `${collapsed.slice(0, PROMPT_SNIPPET_MAX - 1).trimEnd()}…`
+          : collapsed;
+      prompts.push({
+        text: clamped,
+        ts: typeof entry.timestamp === 'string' && entry.timestamp.length > 0 ? entry.timestamp : null,
+      });
+    }
+  }
+  return { prompts, total };
+}

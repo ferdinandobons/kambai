@@ -860,6 +860,36 @@ body {
   overflow-y: auto;
 }
 
+/* Prompt history: a scrollable ordered list of the human turns. */
+.detail-prompts {
+  margin: 0;
+  padding: 4px 0 4px 26px;
+  list-style: decimal;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.detail-prompt-item {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  padding: 4px 12px 4px 2px;
+  word-break: break-word;
+}
+
+.detail-prompt-item::marker {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.detail-prompt-time {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .detail-actions {
   justify-content: space-between;
   align-items: center;

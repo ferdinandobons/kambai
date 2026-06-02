@@ -3,6 +3,7 @@
 //
 // Endpoints (see spec):
 //   GET    /api/sessions          -> { sessions (merged with overlay), columns }
+//   GET    /api/sessions/:id/prompts -> { prompts: [{text,ts}], total }  (human turns)
 //   GET    /api/board             -> Store
 //   POST   /api/cards/:id/move    { columnId, order }
 //   POST   /api/cards/:id/archive { archived }
@@ -23,7 +24,7 @@ import fs from 'node:fs/promises';
 
 import { CLAUDE_PROJECTS_DIR } from './config.js';
 import { scanAllSessions, listSessionFiles } from './scanner.js';
-import { parseSessionFile } from './sessionParser.js';
+import { parseSessionFile, parseSessionPrompts } from './sessionParser.js';
 import { sessionIdFromPath } from './watcher.js';
 import * as store from './store.js';
 import { addClient, broadcast } from './sse.js';
@@ -219,6 +220,21 @@ export async function registerRoutes(fastify) {
 
   // ---- GET /api/board ----------------------------------------------------
   fastify.get('/api/board', async () => store.getBoard());
+
+  // ---- GET /api/sessions/:id/prompts -------------------------------------
+  // The session's human prompt history (read-only, parsed on demand so the bulk
+  // /api/sessions stays light). UUID-guarded + path-contained like DELETE.
+  fastify.get('/api/sessions/:id/prompts', async (request, reply) => {
+    const { id } = request.params;
+    if (!UUID_V4.test(id)) {
+      return reply.code(400).send({ error: 'invalid session id' });
+    }
+    const file = await resolveSessionFile(id);
+    if (!file) {
+      return reply.code(404).send({ error: 'session not found' });
+    }
+    return parseSessionPrompts(file);
+  });
 
   // ---- POST /api/cards/:id/move ------------------------------------------
   fastify.post('/api/cards/:id/move', async (request, reply) => {

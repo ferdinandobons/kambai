@@ -54,6 +54,15 @@ export async function getBoard() {
 }
 
 /**
+ * GET /api/sessions/:id/prompts — the session's human prompt history.
+ * @param {string} id
+ * @returns {Promise<{ prompts: Array<{ text: string, ts: string|null }>, total: number }>}
+ */
+export async function getPrompts(id) {
+  return request(`/api/sessions/${encodeURIComponent(id)}/prompts`);
+}
+
+/**
  * POST /api/cards/:id/move
  * @param {string} id
  * @param {string} columnId

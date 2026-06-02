@@ -9,7 +9,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { parseSessionFile } from '../src/sessionParser.js';
+import { parseSessionFile, parseSessionPrompts } from '../src/sessionParser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -373,4 +373,28 @@ test('parseSessionFile: falls back to decodeProjectDir when no line carries a cw
   // No cwd on the fixture lines → the decoded dir name is still used.
   assert.equal(meta.projectPath, '/Users/ferdinandobons/Desktop/DS4/ds4');
   assert.equal(meta.projectName, 'ds4');
+});
+
+// --- parseSessionPrompts: the human prompt history --------------------------
+
+test('parseSessionPrompts: returns human turns in order, skipping tool_result/JSON/command', async () => {
+  const tmpDir = await fs.mkdtemp(path.join(await fs.realpath((await import('node:os')).tmpdir()), 'kanbai-'));
+  const file = path.join(tmpDir, 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d62.jsonl');
+  const lines = [
+    { type: 'user', timestamp: '2026-06-01T10:00:00.000Z', message: { role: 'user', content: '{ "project_dir": "/x" }' } }, // JSON payload -> skip
+    { type: 'user', timestamp: '2026-06-01T10:01:00.000Z', message: { role: 'user', content: 'Add cursor pagination' } },
+    { type: 'assistant', message: { role: 'assistant', content: 'ok' } },
+    { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: 'done' }] } }, // tool result -> skip
+    { type: 'user', timestamp: '2026-06-01T10:05:00.000Z', message: { role: 'user', content: 'Now add unit tests' } },
+    { type: 'user', message: { role: 'user', content: '<command-name>/bonsai:status</command-name>' } }, // command -> skip
+  ];
+  await fs.writeFile(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\n', 'utf8');
+  try {
+    const { prompts, total } = await parseSessionPrompts(file);
+    assert.equal(total, 2);
+    assert.deepEqual(prompts.map((p) => p.text), ['Add cursor pagination', 'Now add unit tests']);
+    assert.equal(prompts[0].ts, '2026-06-01T10:01:00.000Z');
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
 });

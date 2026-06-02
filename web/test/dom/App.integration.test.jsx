@@ -25,6 +25,7 @@ vi.mock('../../src/api.js', () => {
     __emitterRef: emitterRef,
     getSessions: vi.fn(),
     getBoard: vi.fn(),
+    getPrompts: vi.fn().mockResolvedValue({ prompts: [], total: 0 }),
     moveCard: vi.fn(),
     archiveCard: vi.fn(),
     setTitle: vi.fn(),
