@@ -64,6 +64,29 @@ export default function CardDetailModal({ session, onClose, onRename, onArchive,
     };
   }, [sessionId]);
 
+  // AI summary (via the local `claude` CLI). The cached result lives on the
+  // session (overlay.summary) and updates through store.changed after the call.
+  const [summarizing, setSummarizing] = useState(false);
+  const [summaryError, setSummaryError] = useState(null);
+  // Reset transient summarize state when a different card opens.
+  useEffect(() => {
+    setSummarizing(false);
+    setSummaryError(null);
+  }, [sessionId]);
+
+  const runSummarize = async () => {
+    if (summarizing || sessionId == null) return;
+    setSummarizing(true);
+    setSummaryError(null);
+    try {
+      await api.summarize(sessionId); // store.changed reconciles session.summary
+    } catch (e) {
+      setSummaryError(e?.message ? 'Summarize failed — is the `claude` CLI installed?' : 'Summarize failed.');
+    } finally {
+      setSummarizing(false);
+    }
+  };
+
   // Keep the latest onClose without re-running the keydown effect (the parent
   // passes an inline arrow, so its identity changes every render). Mirrors
   // ColumnEditor's onCloseRef pattern.
@@ -220,6 +243,31 @@ export default function CardDetailModal({ session, onClose, onRename, onArchive,
           <dt>Session ID</dt>
           <dd className="detail-id">{display(session.id)}</dd>
         </dl>
+
+        {/* AI summary (optional) — generated on demand via the local claude CLI. */}
+        <div className="detail-prompt-block">
+          <div className="detail-summary-head">
+            <span className="detail-prompt-label">Summary</span>
+            <button
+              type="button"
+              className="btn btn-link"
+              onClick={runSummarize}
+              disabled={summarizing}
+            >
+              {summarizing ? 'Summarizing…' : session.summary ? 'Re-summarize' : 'Summarize'}
+            </button>
+          </div>
+          {session.summary ? (
+            <div className="detail-prompt detail-summary">{session.summary}</div>
+          ) : (
+            <div className="detail-prompt muted">
+              {summarizing
+                ? 'Asking the model…'
+                : summaryError ||
+                  'Not summarized yet. Summarize uses your local claude CLI (sends this session to the model).'}
+            </div>
+          )}
+        </div>
 
         {session.lastPrompt ? (
           <div className="detail-prompt-block">

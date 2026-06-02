@@ -20,7 +20,8 @@ Server-Sent Events.
 > reads files under `~/.claude/projects/`. The Kanban state lives in a separate local file
 > (`data/store.json`), never inside your sessions directory. The single write under the
 > sessions directory is the explicit **Delete permanently** action, which removes one
-> `.jsonl` file after a confirmation modal.
+> `.jsonl` file after a confirmation modal. The one feature that leaves your machine is the
+> optional **Summarize** button (see below), gated behind an explicit click.
 
 ## Features
 
@@ -30,12 +31,16 @@ Server-Sent Events.
   used (green / amber / red), computed from the session's token usage.
 - **Rich cards** — title (from the session's AI-generated title, with smart fallbacks),
   project + git branch, last activity, message count, and model.
-- **Details & rename** — click a card for a full-detail modal (project path, branch, model,
-  context, full last prompt, session id) and **rename its title** right there. The rename is
-  stored as an override in `data/store.json` — your session files are never modified, and a
-  *Reset to original* is one click away.
+- **Details, prompt history & rename** — click a card for a full-detail modal (project path,
+  branch, model, context, session id) with the **prompt history** (your turns, in order, so
+  you remember what's inside) and an editable **title** (stored as an override in
+  `data/store.json` — your session files are never modified, with one-click *Reset to original*).
+- **Summarize (optional)** — a button that generates a 1-2 sentence summary via your local
+  `claude` CLI (reusing your existing auth, default model: Haiku) and caches it on the card.
+  This is the one action that sends a session to the model; it's gated behind an explicit click.
+  Override the model with `KANBAI_SUMMARY_MODEL`.
 - **Copy resume command** — one click on a card copies `cd <path> && claude --resume <id>`
-  to your clipboard. Kanbai stays read-only — it hands you the command, you run it.
+  to your clipboard. Kanbai hands you the command, you run it.
 - **Triage: "Worth resuming"** — a built-in ranking (high context + recent + reactivated)
   surfaces the sessions actually worth reopening, with a one-click filter and a count badge.
 - **Sort, quick filters & deep links** — sort by last activity / context % / messages /
@@ -116,6 +121,7 @@ npm start       # backend serves web/dist as static on :4319
 | `KANBAI_PORT` | `4319` | Backend HTTP port. |
 | `KANBAI_PROJECTS_DIR` | `~/.claude/projects` | Sessions directory to read (point it at an isolated dataset for tests/demos). |
 | `KANBAI_STORE_PATH` | `data/store.json` | Where the Kanban state is persisted. |
+| `KANBAI_SUMMARY_MODEL` | `haiku` | Model the **Summarize** button passes to the `claude` CLI. |
 
 ## Test
 

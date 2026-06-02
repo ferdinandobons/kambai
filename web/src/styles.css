@@ -860,6 +860,24 @@ body {
   overflow-y: auto;
 }
 
+/* AI summary section: label + a Summarize/Re-summarize action on one row. */
+.detail-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.detail-summary-head .detail-prompt-label {
+  margin-bottom: 0;
+}
+
+.detail-summary {
+  color: var(--text);
+  border-color: rgba(91, 157, 255, 0.35);
+}
+
 /* Prompt history: a scrollable ordered list of the human turns. */
 .detail-prompts {
   margin: 0;

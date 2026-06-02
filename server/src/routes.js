@@ -3,7 +3,8 @@
 //
 // Endpoints (see spec):
 //   GET    /api/sessions          -> { sessions (merged with overlay), columns }
-//   GET    /api/sessions/:id/prompts -> { prompts: [{text,ts}], total }  (human turns)
+//   GET    /api/sessions/:id/prompts    -> { prompts: [{text,ts}], total }  (human turns)
+//   POST   /api/sessions/:id/summarize  -> { summary }  (via the local `claude` CLI; NOT read-only)
 //   GET    /api/board             -> Store
 //   POST   /api/cards/:id/move    { columnId, order }
 //   POST   /api/cards/:id/archive { archived }
@@ -25,6 +26,7 @@ import fs from 'node:fs/promises';
 import { CLAUDE_PROJECTS_DIR } from './config.js';
 import { scanAllSessions, listSessionFiles } from './scanner.js';
 import { parseSessionFile, parseSessionPrompts } from './sessionParser.js';
+import { summarizeSession } from './summarize.js';
 import { sessionIdFromPath } from './watcher.js';
 import * as store from './store.js';
 import { addClient, broadcast } from './sse.js';
@@ -163,6 +165,7 @@ function mergeSessions(sessions, board) {
       order: entry ? entry.order : 0,
       archived: entry ? entry.archived : false,
       lastDoneActivity: entry ? entry.lastDoneActivity : null,
+      summary: entry?.summary ?? null,
     };
   });
 }
@@ -234,6 +237,36 @@ export async function registerRoutes(fastify) {
       return reply.code(404).send({ error: 'session not found' });
     }
     return parseSessionPrompts(file);
+  });
+
+  // ---- POST /api/sessions/:id/summarize ----------------------------------
+  // Generate + cache a 1-2 sentence summary via the local `claude` CLI. NOT
+  // read-only: this sends the session's prompts to the model (gated behind an
+  // explicit user click). The result is cached in the overlay so it runs once.
+  fastify.post('/api/sessions/:id/summarize', async (request, reply) => {
+    const { id } = request.params;
+    if (!UUID_V4.test(id)) {
+      return reply.code(400).send({ error: 'invalid session id' });
+    }
+    const file = await resolveSessionFile(id);
+    if (!file) {
+      return reply.code(404).send({ error: 'session not found' });
+    }
+    let summary;
+    try {
+      const { prompts } = await parseSessionPrompts(file);
+      summary = await summarizeSession(prompts);
+    } catch (err) {
+      request.log.error(err, 'summarize failed');
+      return reply
+        .code(502)
+        .send({ error: 'Could not summarize (is the `claude` CLI installed and authenticated?)' });
+    }
+    if (!summary) {
+      return reply.code(502).send({ error: 'The summarizer returned nothing.' });
+    }
+    broadcastStore(store.setSummary(id, summary));
+    return { summary };
   });
 
   // ---- POST /api/cards/:id/move ------------------------------------------

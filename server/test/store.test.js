@@ -18,6 +18,7 @@ import {
   moveCard,
   setArchived,
   setTitle,
+  setSummary,
   removeOverlay,
   pruneOverlay,
   ensurePlaced,
@@ -393,4 +394,23 @@ test('recovers from a structurally invalid (but valid JSON) store', () => {
   const store = loadStore();
   assert.ok(fs.existsSync(`${storePath}.bak`));
   assert.equal(store.columns.length, 3);
+});
+
+test('setSummary stores and clears an AI summary, creating an entry if missing', () => {
+  loadStore();
+  const sid = 'sum-session-1';
+  // Creates an overlay entry (first column) and stores the summary.
+  setSummary(sid, '  Built a Kanban board.  ');
+  let board = getBoard();
+  assert.equal(board.overlay[sid].summary, 'Built a Kanban board.'); // trimmed
+  assert.equal(board.overlay[sid].columnId, board.columns[0].id);
+  // Persists across a reload.
+  board = getBoard();
+  assert.equal(board.overlay[sid].summary, 'Built a Kanban board.');
+  // Empty/whitespace clears it back to null.
+  setSummary(sid, '   ');
+  assert.equal(getBoard().overlay[sid].summary, null);
+  // Clearing a session that has no entry is a no-op (no row created).
+  setSummary('never-seen', '');
+  assert.equal('never-seen' in getBoard().overlay, false);
 });

@@ -66,6 +66,7 @@ export function mergeOverlay(session, store) {
       order: session.order ?? 0,
       archived: false,
       lastDoneActivity: null,
+      summary: null,
     };
   }
   return {
@@ -77,6 +78,7 @@ export function mergeOverlay(session, store) {
     order: ov.order ?? 0,
     archived: !!ov.archived,
     lastDoneActivity: ov.lastDoneActivity ?? null,
+    summary: ov.summary ?? null,
   };
 }
 

@@ -155,6 +155,7 @@ function normalizeStore(store) {
     if (typeof entry.order !== 'number') entry.order = 0;
     if (!('lastDoneActivity' in entry)) entry.lastDoneActivity = null;
     if (!('customTitle' in entry)) entry.customTitle = null;
+    if (!('summary' in entry)) entry.summary = null;
   }
 
   return store;
@@ -413,6 +414,36 @@ export function setTitle(sessionId, title) {
     return store;
   }
   entry.customTitle = normalized;
+
+  writeStore(store);
+  return store;
+}
+
+/**
+ * Cache an AI-generated summary for a session in its overlay entry (created in
+ * the first column if missing). Pass null/empty to clear it.
+ * @param {string} sessionId
+ * @param {string|null} summary
+ * @returns {Store}
+ */
+export function setSummary(sessionId, summary) {
+  const store = loadStore();
+  const normalized = typeof summary === 'string' && summary.trim() ? summary.trim() : null;
+  let entry = store.overlay[sessionId];
+  if (!entry) {
+    if (normalized === null) return store; // nothing to store
+    const first = store.columns[0];
+    entry = {
+      columnId: first ? first.id : '',
+      order: 0,
+      archived: false,
+      lastDoneActivity: null,
+      customTitle: null,
+      summary: null,
+    };
+    store.overlay[sessionId] = entry;
+  }
+  entry.summary = normalized;
 
   writeStore(store);
   return store;

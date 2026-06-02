@@ -12,6 +12,7 @@ import { ToastProvider } from '../../src/components/CopyToast.jsx';
 // tests don't hit a real fetch, and so the history test can control the result.
 vi.mock('../../src/api.js', () => ({
   getPrompts: vi.fn().mockResolvedValue({ prompts: [], total: 0 }),
+  summarize: vi.fn().mockResolvedValue({ summary: 'A summary.' }),
 }));
 import * as api from '../../src/api.js';
 
@@ -44,6 +45,30 @@ beforeEach(() => {
     value: { writeText: clipboardWrite },
     configurable: true,
     writable: true,
+  });
+});
+
+describe('CardDetailModal summary', () => {
+  it('shows the cached summary when the session has one', async () => {
+    render(
+      <ToastProvider>
+        <CardDetailModal session={makeSession({ summary: 'Built a Kanban board.' })} onClose={() => {}} onRename={() => {}} />
+      </ToastProvider>,
+    );
+    expect(await screen.findByText('Built a Kanban board.')).toBeInTheDocument();
+    // With a summary present the action re-runs it.
+    expect(screen.getByRole('button', { name: 'Re-summarize' })).toBeInTheDocument();
+  });
+
+  it('clicking Summarize calls api.summarize for the session', async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <CardDetailModal session={makeSession()} onClose={() => {}} onRename={() => {}} />
+      </ToastProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Summarize' }));
+    expect(api.summarize).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
   });
 });
 

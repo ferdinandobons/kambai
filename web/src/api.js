@@ -63,6 +63,16 @@ export async function getPrompts(id) {
 }
 
 /**
+ * POST /api/sessions/:id/summarize — generate + cache an AI summary via the
+ * local `claude` CLI. Sends the session's prompts to the model (not read-only).
+ * @param {string} id
+ * @returns {Promise<{ summary: string }>}
+ */
+export async function summarize(id) {
+  return send('POST', `/api/sessions/${encodeURIComponent(id)}/summarize`);
+}
+
+/**
  * POST /api/cards/:id/move
  * @param {string} id
  * @param {string} columnId
